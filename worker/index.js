@@ -12,13 +12,22 @@ function safeText(value, max = 4000) {
   return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+function decodeNumericEntity(_match, hex, decimal) {
+  const codePoint = Number.parseInt(hex || decimal, hex ? 16 : 10);
+  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10FFFF || (codePoint >= 0xD800 && codePoint <= 0xDFFF)) {
+    return '\uFFFD';
+  }
+  return String.fromCodePoint(codePoint);
+}
+
 function xmlText(value) {
-  return safeText(value
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+  return safeText(String(value ?? '')
+    .replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))));
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(?:x([0-9a-f]+)|(\\d+));/gi, decodeNumericEntity));
 }
 
 function tag(block, name) {
