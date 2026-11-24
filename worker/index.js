@@ -301,7 +301,7 @@ async function getListings(request, env) {
   const education = safeText(url.searchParams.get('education'), 100);
   const score = safeText(url.searchParams.get('score'), 50);
   const category = safeText(url.searchParams.get('type'), 100);
-  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100), 1), 200);
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 200), 1), 200);
 
   let sql = `SELECT id, title, institution, summary, category, city, education, score_type AS scoreType, minimum_score AS minimumScore, published_at AS publishedAt, start_date AS startDate, end_date AS endDate, detail_url AS url, source_name AS sourceName, status, source_refs AS sourceRefs, publication_state AS publicationState, position_count AS positionCount FROM announcements WHERE status IN ('open','check_required') AND publication_state NOT IN ('expired','invalid')`;
   const params = [];
