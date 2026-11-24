@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS sources (
   homepage_url TEXT NOT NULL,
   feed_url TEXT,
   feed_type TEXT NOT NULL DEFAULT 'manual' CHECK (feed_type IN ('manual', 'rss', 'json')),
+  adapter TEXT NOT NULL DEFAULT 'feed',
   enabled INTEGER NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'connected', 'failed')),
   last_checked_at TEXT,
