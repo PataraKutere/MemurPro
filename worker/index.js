@@ -396,83 +396,79 @@ async function fetchResmiGazete(source) {
   const baseDate = new Date(Date.UTC(Number(today.year), Number(today.month) - 1, Number(today.day)));
   let lastError = null;
 
-  // Önce günlük Çeşitli İlânlar dosyası, başarısız olursa Resmî Gazete'nin
-  // tarihli sayı sayfası denenir. İki adres de resmigazete.gov.tr alan adındadır.
-  for (let offset = 0; offset < 5; offset++) {
+  // Tarihli ilan dosyasını tahmin etmek yerine önce Resmî Gazete fihristinden resmî bağlantıyı bul.
+  for (let offset = 0; offset < 7; offset++) {
     const date = new Date(baseDate.getTime() - offset * 86400000);
     const year = String(date.getUTCFullYear());
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     const day = String(date.getUTCDate()).padStart(2, '0');
     const dateKey = year + month + day;
-    const dateLabel = day + '.' + month + '.' + year;
-    const directPath = '/ilanlar/eskiilanlar/' + year + '/' + month + '/' + dateKey + '-4.htm';
-    const candidates = [
-      'https://www.resmigazete.gov.tr' + directPath,
-      'https://resmigazete.gov.tr' + directPath,
-      'https://www.resmigazete.gov.tr/' + dateLabel
-    ];
+    const isoDate = year + '-' + month + '-' + day;
+    const directUrl = 'https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/' + year + '/' + month + '/' + dateKey + '-4.htm';
+    const fihristUrl = 'https://www.resmigazete.gov.tr/fihrist?tarih=' + isoDate;
+    const candidates = [fihristUrl, directUrl, directUrl.replace('www.resmigazete.gov.tr', 'resmigazete.gov.tr')];
 
     for (const pageUrl of candidates) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 22000);
+      const timeout = setTimeout(() => controller.abort(), 12000);
       try {
         const response = await fetch(pageUrl, {
           signal: controller.signal,
           headers: {
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'accept-language': 'tr-TR,tr;q=0.9,en;q=0.7',
-            'cache-control': 'no-cache',
-            'referer': 'https://www.resmigazete.gov.tr/'
+            'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.7',
+            'referer': 'https://www.resmigazete.gov.tr/',
+            'cache-control': 'no-cache'
           },
           redirect: 'follow'
         });
-        if (response.status === 404) {
-          lastError = new Error('Resmî Gazete günlük ilan sayfası bulunamadı (HTTP 404).');
-          continue;
-        }
         if (!response.ok) {
-          lastError = new Error('Resmî Gazete sayfası HTTP ' + response.status + ' döndürdü.');
+          lastError = new Error('Resmî Gazete ' + (pageUrl.includes('/fihrist?') ? 'fihrist' : 'Çeşitli İlânlar') + ' sayfası HTTP ' + response.status + ' döndürdü.');
           continue;
         }
         let html = await response.text();
         if (html.length > 4_000_000) throw new Error('Resmî Gazete yanıtı güvenli boyut sınırını aşıyor.');
 
-        // Tarihli sayı sayfası, Çeşitli İlânlar belgesine ayrı bağlantı veriyorsa
-        // bu resmî bağlantıyı takip et.
-        if (!/ÇEŞİTLİ\s+İL[ÂA]NLAR/i.test(xmlText(html))) {
+        if (pageUrl.includes('/fihrist?')) {
           const anchors = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)];
           const section = anchors.find(match => /çeşitli\s+il[âa]nlar/i.test(xmlText(match[2])));
           const href = section?.[1]?.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1];
           if (href) {
             const sectionUrl = new URL(href, pageUrl);
-            if (sectionUrl.hostname === 'www.resmigazete.gov.tr' || sectionUrl.hostname === 'resmigazete.gov.tr') {
-              const sectionController = new AbortController();
-              const sectionTimeout = setTimeout(() => sectionController.abort(), 22000);
-              try {
-                const sectionResponse = await fetch(sectionUrl.toString(), {
-                  signal: sectionController.signal,
-                  headers: {
-                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
-                    'accept': 'text/html,application/xhtml+xml',
-                    'accept-language': 'tr-TR,tr;q=0.9'
-                  },
-                  redirect: 'follow'
-                });
-                if (sectionResponse.ok) html = await sectionResponse.text();
-                else lastError = new Error('Resmî Gazete Çeşitli İlânlar bağlantısı HTTP ' + sectionResponse.status + ' döndürdü.');
-              } finally {
-                clearTimeout(sectionTimeout);
+            if (sectionUrl.hostname !== 'www.resmigazete.gov.tr' && sectionUrl.hostname !== 'resmigazete.gov.tr') {
+              throw new Error('Resmî Gazete fihrist bağlantısı resmî alan adı dışında.');
+            }
+            const sectionController = new AbortController();
+            const sectionTimeout = setTimeout(() => sectionController.abort(), 12000);
+            try {
+              const sectionResponse = await fetch(sectionUrl.toString(), {
+                signal: sectionController.signal,
+                headers: {
+                  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+                  'accept': 'text/html,application/xhtml+xml',
+                  'accept-language': 'tr-TR,tr;q=0.9',
+                  'referer': fihristUrl
+                },
+                redirect: 'follow'
+              });
+              if (!sectionResponse.ok) {
+                lastError = new Error('Resmî Gazete Çeşitli İlânlar bağlantısı HTTP ' + sectionResponse.status + ' döndürdü.');
+                continue;
               }
+              html = await sectionResponse.text();
+            } finally {
+              clearTimeout(sectionTimeout);
             }
           }
         }
 
-        const items = parseResmiGazeteItems(html, source, dateKey, pageUrl);
-        const pageText = xmlText(html);
-        if (items.length) return items;
-        if (/ÇEŞİTLİ\s+İL[ÂA]NLAR/i.test(pageText)) return [];
-        lastError = new Error('Resmî Gazete sayfası açıldı ancak Çeşitli İlânlar bölümü doğrulanamadı.');
+        if (!/ÇEŞİTLİ\s+İL[ÂA]NLAR/i.test(xmlText(html))) {
+          lastError = new Error('Resmî Gazete sayfası açıldı ancak Çeşitli İlânlar başlığı bulunamadı.');
+          continue;
+        }
+        // Bölüm doğrulandıysa boş sonuç da başarılı kontroldür.
+        return parseResmiGazeteItems(html, source, dateKey, pageUrl);
       } catch (error) {
         lastError = error;
       } finally {
@@ -480,17 +476,18 @@ async function fetchResmiGazete(source) {
       }
     }
   }
-  throw lastError || new Error('Son 5 gün içinde Resmî Gazete Çeşitli İlânlar sayfası bulunamadı.');
+  throw lastError || new Error('Son 7 gün içinde Resmî Gazete Çeşitli İlânlar sayfası doğrulanamadı.');
 }
 async function fetchKariyerKapisi(source) {
-  const endpoint = 'https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage';
+  const endpoints = ['https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage', 'https://kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage'];
   const requestBody = { krM_ID: 0, searchText: '', il: '0', ilanTuru: '0' };
   let response;
   let lastError;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (const endpoint of endpoints) {
+   for (let attempt = 0; attempt < 2; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 27000);
+    const timeout = setTimeout(() => controller.abort(), 18000);
     try {
       response = await fetch(endpoint, {
         method: 'POST',
@@ -511,14 +508,16 @@ async function fetchKariyerKapisi(source) {
       lastError = error;
       const status = response?.status;
       const retryable = !status || [429, 500, 502, 503, 504].includes(status);
-      if (!retryable || attempt === 2) throw new Error('Kariyer Kapısı erişimi başarısız: ' + safeText(error?.message || error, 300));
+      if (!retryable || attempt === 1) { lastError = error; break; }
     } finally {
       clearTimeout(timeout);
     }
-    await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)));
+    await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
+   }
+   if (response?.ok) break;
   }
 
-  if (!response || !response.ok) throw new Error('Kariyer Kapısı API yanıt vermedi: ' + safeText(lastError?.message || 'bilinmeyen hata', 300));
+  if (!response || !response.ok) throw new Error('Kariyer Kapısı herkese açık ilan akışı yanıt vermedi: ' + safeText(lastError?.message || 'iki resmî API adresi de başarısız', 300));
   const payload = await response.json();
   if (!Array.isArray(payload?.searchIlan)) throw new Error('Kariyer Kapısı API beklenen searchIlan listesini döndürmedi.');
 
