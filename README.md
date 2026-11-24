@@ -13,7 +13,7 @@
 
 ## Önemli: canlı ilan durumu
 
-Bu sürüm **henüz canlı ilan toplama sistemi değildir**. Doğrulanmış herkese açık RSS/JSON akış adresleri tanımlanmamıştır. Uygulama sahte ilan göstermez; gerçek veri kaynakları bağlanana kadar boş durum gösterir.
+Bu sürümde Cloudflare Worker ve D1 veritabanı kuruldu. ÖSYM'nin herkese açık KPSS duyuru sayfası için ilk HTML kaynak adaptörü eklendi; başvuru durumu doğrulanamayan duyurular açık ilan olarak işaretlenmez. Kariyer Kapısı, SBB, İŞKUR ve diğer kaynaklar ayrı bağlayıcılar bekliyor.
 
 Resmî kaynak dizini:
 - Kariyer Kapısı: <https://kariyerkapisi.gov.tr/>
