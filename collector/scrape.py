@@ -131,8 +131,9 @@ def scrape_kariyer(browser):
         for endpoint in ("https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage","https://kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage"):
             for attempt in range(3):
                 try:
-                    resp=p.request.post(endpoint,data=body,
-                      headers={"Referer":"https://kariyerkapisi.gov.tr/","Origin":"https://kariyerkapisi.gov.tr","Accept":"application/json, text/plain, */*"},
+                    # Site XHR's actual request is JSON; form-urlencoded requests receive HTTP 406.
+                    resp=p.request.post(endpoint,data=json.dumps(body,ensure_ascii=False),
+                      headers={"Referer":"https://kariyerkapisi.gov.tr/isealim","Origin":"https://kariyerkapisi.gov.tr","Content-Type":"application/json","Accept":"application/json, text/plain, */*"},
                       timeout=25000)
                     if not resp.ok: raise RuntimeError(f"Kariyer API HTTP {resp.status}")
                     payload=resp.json()
