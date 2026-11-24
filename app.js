@@ -365,6 +365,37 @@ function deadlineLabel(value) {
   return `${left} gün kaldı`;
 }
 
+function renderReminderCenter(items) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const reminders = [];
+  items.forEach(item => {
+    const tracking = getTracking(item.id);
+    const deadline = tracking.deadline || item.endDate || '';
+    const lead = Number(tracking.reminderDays ?? 3);
+    if (deadline && lead > 0) {
+      const date = new Date(`${deadline}T00:00:00`);
+      if (!Number.isNaN(date.getTime())) {
+        const left = daysBetween(today, date);
+        if (left >= 0 && left <= lead) reminders.push({ item, date, kind: 'deadline', left, label: left === 0 ? 'Son başvuru bugün' : `Son başvuruya ${left} gün kaldı` });
+      }
+    }
+    if (tracking.resultDate) {
+      const date = new Date(`${tracking.resultDate}T00:00:00`);
+      if (!Number.isNaN(date.getTime())) {
+        const left = daysBetween(today, date);
+        if (left >= 0 && left <= 30) reminders.push({ item, date, kind: 'result', left, label: left === 0 ? 'Beklenen sonuç tarihi bugün' : `Beklenen sonuç tarihine ${left} gün kaldı` });
+      }
+    }
+  });
+  reminders.sort((a,b) => a.date - b.date || a.item.title.localeCompare(b.item.title, 'tr'));
+  const rows = reminders.length ? reminders.map(reminder => `
+    <div class="reminder-row">
+      <span class="reminder-date">${reminder.date.toLocaleDateString('tr-TR',{day:'2-digit',month:'short'})}</span>
+      <div><strong>${escapeHTML(reminder.item.title)}</strong><small>${escapeHTML(reminder.label)} · ${reminder.kind === 'deadline' ? 'Başvuru son tarihi' : 'Sonuç takibi'}</small></div>
+    </div>`).join('') : `<div class="reminder-empty">Yaklaşan hatırlatma yok. Son başvuru veya beklenen sonuç tarihini eklediğinde burada görünecek.</div>`;
+  return `<section class="reminder-center"><div class="reminder-center-head"><div><strong>Yaklaşan tarihler</strong><small>Başvuru ve sonuç takvimin</small></div><span>${reminders.length} hatırlatma</span></div><div class="reminder-list">${rows}</div><p class="reminder-note">Bu hatırlatmalar MemurPro'yu açtığında takip listende görünür; uygulama kapalıyken otomatik bildirim gönderilmez.</p></section>`;
+}
+
 function renderSaved() {
   const container = $('#savedResults');
   if (!state.saved.length) {
@@ -391,7 +422,8 @@ function renderSaved() {
     return daysBetween(today, new Date(`${value}T00:00:00`)) < 0;
   }).length;
   const summary = `<div class="tracking-summary"><span><strong>${state.saved.length}</strong> takip edilen ilan</span><span><strong>${dueSoon}</strong> 7 gün içinde</span><span><strong>${overdue}</strong> tarihi geçen</span></div>`;
-  container.innerHTML = summary + ordered.map(item => {
+  const reminderCenter = renderReminderCenter(ordered);
+  container.innerHTML = summary + reminderCenter + ordered.map(item => {
     const tracking = getTracking(item.id);
     const deadline = tracking.deadline || item.endDate || '';
     const options = APPLICATION_STATUSES.map(([value, label]) => `<option value="${value}" ${tracking.status === value ? 'selected' : ''}>${label}</option>`).join('');
@@ -400,6 +432,14 @@ function renderSaved() {
     const controls = `<div class="application-tracker">
       <label><span>Başvuru durumu</span><select data-track-status="${escapeHTML(item.id)}">${options}</select></label>
       <label><span>Son başvuru tarihi</span><input type="date" value="${escapeHTML(deadline)}" data-track-deadline="${escapeHTML(item.id)}"></label>
+      <label><span>Hatırlatma</span><select data-track-reminder="${escapeHTML(item.id)}">
+        <option value="0" ${Number(tracking.reminderDays ?? 3)===0?'selected':''}>Kapalı</option>
+        <option value="1" ${Number(tracking.reminderDays ?? 3)===1?'selected':''}>1 gün önce</option>
+        <option value="3" ${Number(tracking.reminderDays ?? 3)===3?'selected':''}>3 gün önce</option>
+        <option value="7" ${Number(tracking.reminderDays ?? 3)===7?'selected':''}>7 gün önce</option>
+        <option value="14" ${Number(tracking.reminderDays ?? 3)===14?'selected':''}>14 gün önce</option>
+      </select></label>
+      <label><span>Beklenen sonuç tarihi</span><input type="date" value="${escapeHTML(tracking.resultDate || '')}" data-track-result="${escapeHTML(item.id)}"></label>
       <span class="deadline-countdown${tone}">${escapeHTML(days)}</span>
     </div>${checklistMarkup(item, tracking)}`;
     return listingCard(item).replace('</article>', `${controls}</article>`);
@@ -664,6 +704,8 @@ function bindEvents() {
   document.addEventListener('change', event => {
     const statusControl = event.target.closest('[data-track-status]');
     const deadlineControl = event.target.closest('[data-track-deadline]');
+    const reminderControl = event.target.closest('[data-track-reminder]');
+    const resultControl = event.target.closest('[data-track-result]');
     if (statusControl) {
       saveTracking(statusControl.dataset.trackStatus, { status: statusControl.value });
       showToast('Başvuru durumu kaydedildi.');
@@ -672,6 +714,16 @@ function bindEvents() {
       saveTracking(deadlineControl.dataset.trackDeadline, { deadline: deadlineControl.value });
       renderSaved();
       showToast('Son başvuru tarihi kaydedildi.');
+    }
+    if (reminderControl) {
+      saveTracking(reminderControl.dataset.trackReminder, { reminderDays: Number(reminderControl.value) });
+      renderSaved();
+      showToast(reminderControl.value === '0' ? 'Başvuru hatırlatması kapatıldı.' : 'Hatırlatma tercihi kaydedildi.');
+    }
+    if (resultControl) {
+      saveTracking(resultControl.dataset.trackResult, { resultDate: resultControl.value });
+      renderSaved();
+      showToast('Beklenen sonuç tarihi kaydedildi.');
     }
     const stepControl = event.target.closest('[data-track-step]');
     if (stepControl) {
