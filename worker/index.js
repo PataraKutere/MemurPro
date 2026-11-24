@@ -128,14 +128,14 @@ async function getListings(request, env) {
 
 function parseOsymKpssPage(html, source) {
   const months = { 'ocak':'01','şubat':'02','mart':'03','nisan':'04','mayıs':'05','haziran':'06','temmuz':'07','ağustos':'08','eylül':'09','ekim':'10','kasım':'11','aralık':'12' };
-  const matches = [...html.matchAll(/<a\\b([^>]*)>([\\s\\S]*?)<\\/a>/gi)];
+  const matches = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)];
   const seen = new Set();
   const items = [];
 
   for (const match of matches) {
     const attrs = match[1] || '';
     const inner = match[2] || '';
-    const hrefMatch = attrs.match(/href\\s*=\\s*["']([^"']+)["']/i);
+    const hrefMatch = attrs.match(/href\s*=\s*["']([^"']+)["']/i);
     if (!hrefMatch) continue;
 
     const title = xmlText(inner);
@@ -146,7 +146,7 @@ function parseOsymKpssPage(html, source) {
       detailUrl = new URL(hrefMatch[1], source.homepage_url).toString();
       const parsed = new URL(detailUrl);
       if (parsed.hostname !== 'www.osym.gov.tr' && parsed.hostname !== 'osym.gov.tr') continue;
-      if (/SinavGrubu\\/Index\\/3/i.test(parsed.pathname)) continue;
+      if (/SinavGrubu\/Index\/3/i.test(parsed.pathname)) continue;
     } catch {
       continue;
     }
@@ -154,11 +154,11 @@ function parseOsymKpssPage(html, source) {
     seen.add(detailUrl);
 
     let publishedAt = null;
-    const dateMatch = title.match(/(\\d{1,2})\\s+(Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)\\s+(\\d{4})/i);
+    const dateMatch = title.match(/(\d{1,2})\s+(Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)\s+(\d{4})/i);
     if (dateMatch) {
       const day = dateMatch[1].padStart(2, '0');
       const month = months[dateMatch[2].toLocaleLowerCase('tr-TR')];
-      if (month) publishedAt = new Date(`${dateMatch[3]}-${month}-${day}T00:00:00+03:00`).toISOString();
+      if (month) publishedAt = new Date(dateMatch[3] + '-' + month + '-' + day + 'T00:00:00+03:00').toISOString();
     }
 
     items.push({
