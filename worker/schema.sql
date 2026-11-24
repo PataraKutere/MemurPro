@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS sources (
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'connected', 'failed')),
   last_checked_at TEXT,
   last_error TEXT,
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  backoff_until TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -34,6 +36,10 @@ CREATE TABLE IF NOT EXISTS announcements (
   source_name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'check_required' CHECK (status IN ('open', 'closed', 'check_required')),
   content_hash TEXT,
+  dedupe_hash TEXT,
+  source_refs TEXT NOT NULL DEFAULT '[]',
+  publication_state TEXT NOT NULL DEFAULT 'draft',
+  position_count INTEGER,
   last_verified_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -56,3 +62,6 @@ INSERT OR IGNORE INTO sources (id, name, homepage_url, feed_type, status) VALUES
   ('ilan-gov', 'İlan.gov.tr', 'https://www.ilan.gov.tr/', 'manual', 'pending'),
   ('resmi-gazete', 'Resmî Gazete', 'https://www.resmigazete.gov.tr/', 'manual', 'pending'),
   ('kamuilan-sbb', 'Kamu İlanları (SBB)', 'https://kamuilan.sbb.gov.tr/', 'manual', 'pending');
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_announcements_dedupe_hash ON announcements(dedupe_hash) WHERE dedupe_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sources_backoff ON sources(backoff_until);
