@@ -508,7 +508,19 @@ function renderReminderCenter(items) {
   return `<section class="reminder-center"><div class="reminder-center-head"><div><strong>Yaklaşan tarihler</strong><small>Başvuru ve sonuç takvimin</small></div><span>${reminders.length} hatırlatma</span></div><div class="reminder-list">${rows}</div><p class="reminder-note">Bu hatırlatmalar MemurPro'yu açtığında takip listende görünür; uygulama kapalıyken otomatik bildirim gönderilmez.</p></section>`;
 }
 
+function renderOverviewReminders() {
+  const container = $('#overviewReminders');
+  if (!container) return;
+  const ordered = [...state.saved].sort((a, b) => {
+    const da = getTracking(a.id).deadline || a.endDate || '9999-12-31';
+    const db = getTracking(b.id).deadline || b.endDate || '9999-12-31';
+    return da.localeCompare(db);
+  });
+  container.innerHTML = renderReminderCenter(ordered);
+}
+
 function renderSaved() {
+  renderOverviewReminders();
   const container = $('#savedResults');
   if (!state.saved.length) {
     container.innerHTML = `<div class="listing-placeholder"><div class="empty-icon">☆</div><strong>Henüz takip ettiğin ilan yok</strong><p>İlanlar bölümünde bir ilanı yıldızlayarak buraya ekleyebilirsin. Kayıtların bu tarayıcıda saklanır.</p><button class="button button-outline" data-go="listings">İlanları keşfet</button></div>`;
