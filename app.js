@@ -156,7 +156,7 @@ function updateSourceFilter() {
   // Filtre seçeneklerini yalnızca Genel Bakış > Veri Kaynakları bölümündeki
   // resmî kaynak satırlarından üret. API yanıtı gelmese bile seçenekler görünür.
   const names = new Map(
-    $('.source-row .source-copy strong')
+    Array.from(document.querySelectorAll('.source-row .source-copy strong'))
       .map(element => [element.textContent.trim(), null])
       .filter(([name]) => name)
   );
