@@ -389,7 +389,7 @@ def scrape_iskur(browser):
                 if parent.parent:
                     parent=parent.parent
                     candidate=tx(parent.get_text(" ",strip=True))
-                    if len(candidate)>len(title) and (re.search(r"\\d{8,11}",candidate) or re.search(r"son başvuru|açık pozisyon|çalışma yeri",candidate,re.I)):
+                    if len(candidate)>len(title) and (re.search(r"\d{8,11}",candidate) or re.search(r"son başvuru|açık pozisyon|çalışma yeri",candidate,re.I)):
                         card_text=candidate
                         break
             out.append(item("iskur",href,title,"İŞKUR kamu işyeri türü filtresinden listelenen açık iş ilanı",href,card_text,category="İşçi"))
