@@ -132,7 +132,8 @@ function renderListings() {
 
 function getProfileMatch(listing) {
   const profile = state.profile;
-  if (!profile || !(profile.education || profile.scoreType || profile.city || Number.isFinite(Number(profile.score)))) return null;
+  const hasScore = profile && profile.score !== null && profile.score !== undefined && profile.score !== '';
+  if (!profile || !(profile.education || profile.scoreType || profile.city || hasScore)) return null;
   let points = 0;
   let known = 0;
   const reasons = [];
@@ -322,11 +323,11 @@ function saveProfile() {
     city: $('#profileCity').value.trim(),
     savedAt: new Date().toISOString()
   };
-  localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
-  state.profile = profile;
   if (profile.score !== null && (!Number.isFinite(profile.score) || profile.score < 0 || profile.score > 100)) {
     return setToolResult($('#profileResult'), 'KPSS puanı 0–100 arasında olmalı.', 'warning');
   }
+  localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
+  state.profile = profile;
   setToolResult($('#profileResult'), 'Tercihlerin bu tarayıcıya kaydedildi. Sunucuya gönderilmedi.', 'success');
   renderMatchedListings();
   showToast('Aday tercihlerin kaydedildi.');
