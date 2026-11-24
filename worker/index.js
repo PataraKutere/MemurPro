@@ -955,15 +955,8 @@ export default {
         const [listings, sources] = await Promise.all([getListings(request, env), getSources(env)]);
         return json({ listings, sources, updatedAt: new Date().toISOString() });
       }
-      if (request.method === 'POST' && url.pathname === '/api/sync-now') {
-        // Keep the HTTP request open until the sync completes. waitUntil() only
-        // extends background work by 30 seconds after the response on Free plans.
-        const results = await syncConfiguredSources(env);
-        return json({ ok: true, completed: true, results });
-      }
-      if (request.method === 'POST' && url.pathname === '/api/admin/sync') {
-        if (!env.ADMIN_TOKEN || request.headers.get('x-admin-token') !== env.ADMIN_TOKEN) return json({ error: 'Yetkisiz işlem.' }, 401);
-        return json({ results: await syncConfiguredSources(env) });
+      if (request.method === 'POST' && (url.pathname === '/api/sync-now' || url.pathname === '/api/admin/sync')) {
+        return json({ error: 'Kaynak taraması GitHub Actions tarafından yürütülür. Actions ekranından workflow_dispatch başlatın.' }, 410);
       }
       return json({ error: 'Bulunamadı.' }, 404);
     } catch (error) {
@@ -971,8 +964,7 @@ export default {
     }
   },
 
-  async scheduled(_controller, env, ctx) {
-    if (!env.DB) return;
-    ctx.waitUntil(syncConfiguredSources(env));
+  async scheduled() {
+    // Collection is handled by GitHub Actions. Worker only validates and stores batches.
   }
 };
