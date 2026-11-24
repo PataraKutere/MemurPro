@@ -164,6 +164,30 @@ function normalizeIngestItem(item, source) {
   };
 }
 
+async function sendTelegramFailureAlert(env, sourceName, message, failures, backoffUntil) {
+  const botToken = env.TELEGRAM_BOT_TOKEN;
+  const chatId = env.TELEGRAM_CHAT_ID;
+  const shouldNotify = failures === 3 || (failures > 3 && (failures - 3) % 3 === 0);
+  if (!botToken || !chatId || !shouldNotify) return;
+  const text = [
+    'MemurPro kaynak uyarısı',
+    'Kaynak: ' + sourceName,
+    'Ardışık hata: ' + failures,
+    'Hata: ' + message,
+    backoffUntil ? 'Sonraki deneme: ' + backoffUntil : 'Kaynak yeniden denenecek.'
+  ].join('\n');
+  try {
+    await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text }),
+      signal: AbortSignal.timeout(4000)
+    });
+  } catch {
+    // Notification failure must never prevent the source status from being saved.
+  }
+}
+
 async function ingestBatch(request, env) {
   if (!env.ADMIN_TOKEN || request.headers.get('x-admin-token') !== env.ADMIN_TOKEN) {
     return json({ error: 'Yetkisiz işlem.' }, 401);
@@ -186,6 +210,7 @@ async function ingestBatch(request, env) {
     const backoffUntil = backoffMinutes ? new Date(Date.now() + backoffMinutes * 60000).toISOString() : null;
     await env.DB.prepare("UPDATE sources SET status='failed', failure_count=?, backoff_until=?, last_checked_at=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
       .bind(failures, backoffUntil, now, message, sourceId).run();
+    await sendTelegramFailureAlert(env, sourceResult.name, message, failures, backoffUntil);
     return json({ ok: true, sourceId, status: 'failed', failureCount: failures, backoffUntil, imported: 0 });
   }
 
