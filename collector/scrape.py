@@ -436,6 +436,7 @@ def scrape_iskur_memur(browser):
             if "İstanbul iline ait İlanlar" not in body and "Kamu Memur Alım İlanları" not in body:
                 raise RuntimeError("İŞKUR kamu memur ilan sayfası beklenen içerikle açılmadı.")
             print("İŞKUR Kamu Memur: sayfa erişilebilir, uygun ilan bulunamadı.")
+        print(f"İŞKUR Kamu Memur: {len(out)} ilan bulundu.")
         return out[:100]
     finally:
         p.close()
