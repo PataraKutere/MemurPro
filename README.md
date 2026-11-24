@@ -95,6 +95,21 @@ JSON akışı aşağıdaki normalize edilmiş alanları içermelidir:
 
 `status: open` yalnızca kaynak başvurunun açık olduğunu ve son tarihi gerçekten verdiğinde kullanılmalıdır. RSS'den gelen ve başvuru bitişi bilinmeyen kayıtlar `check_required` olarak saklanır; kesin açık ilan gibi sunulmaz.
 
+
+## Kaynak erişiminde yerel runner seçeneği
+
+GitHub-hosted Linux runner bazı resmî sitelerde IP tabanlı HTTP 403/406 engeline takılabilir. Bu engeli atlatmaya çalışmak yerine, yalnızca kendi güvendiğin bilgisayarda çalışan bir GitHub self-hosted runner seçeneği eklenmiştir.
+
+1. GitHub deposunda **Settings → Actions → Runners → New self-hosted runner** bölümünü aç.
+2. Windows x64 platformunu seç ve GitHub'ın ekranda verdiği kurulum komutlarını kendi bilgisayarında PowerShell ile uygula.
+3. Runner'ı çalışır durumda bırak. İstersen GitHub'ın önerdiği şekilde Windows hizmeti olarak kur.
+4. Depoda **Actions → MemurPro official-source collector → Run workflow** ekranına gir.
+5. `runner` seçeneğini `self-hosted` yapıp çalıştır.
+
+Runner henüz kayıtlı değilse `self-hosted` seçme; iş sırada bekler. Bu runner depo koduna ve Actions secret'larına erişebileceği için yalnızca kendi kontrolündeki güvenilir bilgisayarda kurulmalıdır. Kurulum sırasında GitHub'ın verdiği geçici kayıt token'ını kimseyle paylaşma.
+
+Varsayılan seçenek hâlâ `github-hosted` olarak kalır. Yerel runner zorunlu değildir; yalnızca erişim engeli yaşayan kaynakları ev interneti üzerinden kontrol etmek için kullanılabilir.
+
 ## Yerel geliştirme
 
 Statik arayüz için derleme/paket kurulumu gerekmez. `index.html` bir HTTPS statik barındırma hizmetinde açılabilir. PWA/service worker özellikleri `file://` yerine HTTPS veya localhost altında çalışır.
