@@ -217,3 +217,21 @@ body{background:#0d1523;color:#e4eaf4}
 .add-document-row input{min-width:0;flex:1;height:34px;padding:0 10px;border:1px solid #3a4a60;border-radius:8px;background:#172438;color:#e4eaf4;font:500 10px 'DM Sans',sans-serif}
 .add-document-row button{padding:0 12px;border:1px solid #465b7b;border-radius:8px;background:#263a56;color:#dce7f6;font-size:10px;font-weight:700;cursor:pointer}
 @media(max-width:620px){.application-checklist{padding:12px}.checklist-steps{grid-template-columns:1fr}.add-document-row{align-items:stretch}.add-document-row button{padding:0 10px}}
+
+
+/* Application and result date reminders */
+.reminder-center{margin:12px 0 18px;padding:16px;border:1px solid #354761;border-radius:12px;background:#142238}
+.reminder-center-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.reminder-center-head strong{display:block;color:#e5edf8;font-size:12px}
+.reminder-center-head small{display:block;margin-top:4px;color:#91a2ba;font-size:9px}
+.reminder-center-head>span{padding:5px 8px;border-radius:7px;background:#283957;color:#c5d0e3;font-size:9px;font-weight:700}
+.reminder-list{display:grid;gap:7px}
+.reminder-row{display:flex;align-items:center;gap:11px;padding:9px 10px;border:1px solid #2c3d55;border-radius:9px;background:#192a41}
+.reminder-date{flex:0 0 48px;color:#e6c17d;font-size:10px;font-weight:800}
+.reminder-row strong{display:block;color:#e0e8f4;font-size:10px;line-height:1.45}
+.reminder-row small{display:block;margin-top:3px;color:#9eafc4;font-size:9px}
+.reminder-empty{padding:12px;border:1px dashed #40516a;border-radius:8px;color:#9aabc0;font-size:10px;line-height:1.5}
+.reminder-note{margin:10px 0 0;color:#8193aa;font-size:8px;line-height:1.5}
+.application-tracker label{min-width:150px}
+.application-tracker select,.application-tracker input{min-width:150px}
+@media(max-width:620px){.reminder-center{padding:12px}.application-tracker label{width:100%}.application-tracker select,.application-tracker input{min-width:0}}
