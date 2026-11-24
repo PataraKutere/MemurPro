@@ -1,0 +1,14 @@
+{
+  "name": "MemurPro - Kamu İlanları Takip Merkezi",
+  "short_name": "MemurPro",
+  "description": "Kamu personel alımlarını ve KPSS duyurularını takip et.",
+  "lang": "tr-TR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#101b31",
+  "icons": [
+    { "src": "assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
