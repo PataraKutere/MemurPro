@@ -142,7 +142,7 @@ async function loadLiveData() {
   try {
     const apiBase = String(window.MEMURPRO_API_BASE || '').replace(/\/$/, '');
     if (!apiBase) return null; // GitHub Pages tek başına kullanılıyorsa API çağrısı yapma.
-    const response = await fetch(`${apiBase}/api/listings`, { headers: { Accept: 'application/json' } });
+    const response = await fetch(`${apiBase}/api/listings`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
     if (!response.ok) throw new Error(`API ${response.status}`);
     const payload = await response.json();
     if (!Array.isArray(payload.listings)) throw new Error('Beklenmeyen API yanıtı');
@@ -280,27 +280,26 @@ async function refreshSources() {
 
   if (button) {
     button.disabled = true;
-    button.textContent = 'Kontrol başlatılıyor…';
+    button.textContent = 'Kaynaklar kontrol ediliyor…';
   }
 
   try {
-    const response = await fetch(`${apiBase}/api/sync-now`, { method: 'POST', headers: { Accept: 'application/json' } });
+    // The Worker keeps this request open until every source has finished.
+    const response = await fetch(`${apiBase}/api/sync-now`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store'
+    });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || `API ${response.status}`);
-    showToast('Kaynak kontrolü başlatıldı. Sonuçlar bekleniyor.');
-    let completed = false;
-    for (let attempt = 0; attempt < 12; attempt++) {
-      await new Promise(resolve => window.setTimeout(resolve, 4000));
-      const latest = await loadLiveData();
-      const sources = latest?.sources || [];
-      if (sources.length && sources.every(source => source.lastError !== 'Kontrol ediliyor.')) {
-        completed = true;
-        break;
-      }
-      if (button) button.textContent = 'Kaynaklar kontrol ediliyor…';
-    }
-    if (completed) showToast('Kaynak kontrolü tamamlandı. Durumlar güncellendi.');
-    else showToast('Kontrol hâlâ sürüyor. Biraz sonra kaynak listesini yenileyebilirsin.');
+
+    await loadLiveData();
+    const results = Array.isArray(payload.results) ? payload.results : [];
+    const imported = results.reduce((sum, item) => sum + (Number(item.imported) || 0), 0);
+    const failed = results.filter(item => item.status === 'failed').length;
+    showToast(failed
+      ? `Kontrol bitti: ${imported} ilan kaydı · ${failed} kaynakta erişim hatası.`
+      : `Kaynak kontrolü tamamlandı: ${imported} ilan kaydı alındı.`);
   } catch (error) {
     showToast(`Kaynak kontrolü başlatılamadı: ${error.message}`);
   } finally {
