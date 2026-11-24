@@ -42,6 +42,8 @@ Bu depo `PataraKutere/MemurPro` adıyla oluşturulmuştur. Dosyalar kök dizinde
 - `GET /api/sources`
 - `GET /api/listings`
 - `POST /api/sync-now` (public, source-specific polling limits and atomic claim are enforced)
+
+In the site, **Şimdi kontrol et** starts the first check without requiring a user to open Cloudflare. The button queues the job; source states update after the Worker finishes. The periodic Cron runs every 30 minutes, but individual source adapters apply their own lower polling frequency.
 - `POST /api/admin/sync` (yalnızca `x-admin-token` gizli başlığıyla)
 
 ### Backend kurulum özeti
