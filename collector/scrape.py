@@ -481,6 +481,7 @@ def scrape_iskur_memur(browser):
                     full_text=tx(" ".join(page.extract_text() or "" for page in reader.pages))[:12000]
                     if not full_text:
                         raise RuntimeError("İŞKUR PDF metni boş veya taranmış görüntü.")
+                    print(f"İŞKUR PDF OK: {title} · {len(full_text)} karakter · bölümler: {', '.join(departments) if departments else 'metinden çıkarılamadı'}",file=sys.stderr)
                     department_patterns=[
                         (r"\badalet\b","Adalet"),
                         (r"mahalli\s+idareler","Mahalli İdareler"),
@@ -567,7 +568,7 @@ def scrape_sbb(browser):
     finally: p.close()
 
 SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":scrape_ilan,"kamuilan-sbb":scrape_sbb,"sbb-kurum-duyurulari":lambda b:scrape_sbb_official(),"iskur":scrape_iskur,"iskur-kamu-memur":scrape_iskur_memur}
-SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"sbb-kurum-duyurulari":180,"iskur":240,"iskur-kamu-memur":30}
+SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"sbb-kurum-duyurulari":180,"iskur":240,"iskur-kamu-memur":5}
 def report(sid,items=None,error=None):
     if not TOKEN: raise RuntimeError("MEMURPRO_INGEST_TOKEN secret is missing")
     r=requests.post(API+"/api/ingest",headers={"x-admin-token":TOKEN},json={"sourceId":sid,"items":items or [],"error":error},timeout=30); r.raise_for_status(); return r.json()
