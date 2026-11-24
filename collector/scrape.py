@@ -1,13 +1,19 @@
-import json, os, re, sys, time
+import json, os, re, sys, time, io
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from pypdf import PdfReader
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 API=os.environ["MEMURPRO_API_BASE"].rstrip("/")  # public MemurPro read API
 TOKEN=os.environ.get("MEMURPRO_INGEST_TOKEN","")
 S=requests.Session()
+_retry=Retry(total=3, connect=3, read=2, backoff_factor=0.8, status_forcelist=(408,425,429,500,502,503,504), allowed_methods=frozenset(["GET","HEAD"]), raise_on_status=False)
+S.mount("https://", HTTPAdapter(max_retries=_retry, pool_connections=10, pool_maxsize=10))
+S.mount("http://", HTTPAdapter(max_retries=_retry, pool_connections=5, pool_maxsize=5))
 S.headers.update({"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36","Accept-Language":"tr-TR,tr;q=0.9"})
 RE=re.compile(r"personel\s+al[ıi]m|memur\s+al[ıi]m|sözleşmeli\s+personel|işçi\s+al[ıi]m|öğretim\s+(?:üyesi|elemanı|görevlisi)\s+al[ıi]m|uzman\s+yardımcısı|müfettiş\s+yardımcısı|zabıta\s+memuru|itfaiye\s+eri",re.I)
 BAD=re.compile(r"\b(sonuç|yerleştirilen|kazanan|iptal|düzeltme|duyuru sonucu|cevap anahtarı|cevap kâğıdı|aday cevapları|kura sonucu|atama sonucu)\b",re.I)
@@ -83,7 +89,7 @@ def scrape_kariyer(browser):
     p.on("request",on_request); p.on("response",on_response)
     try:
         try:
-            p.goto("https://kariyerkapisi.gov.tr/isealim",wait_until="domcontentloaded",timeout=15000)
+            p.goto("https://kariyerkapisi.gov.tr/isealim",wait_until="domcontentloaded",timeout=25000)
             p.wait_for_timeout(3500)
         except Exception as exc:
             print("Kariyer sayfa açılışı:",str(exc)[:180],file=sys.stderr)
@@ -93,17 +99,19 @@ def scrape_kariyer(browser):
         body={"krM_ID":0,"searchText":"","il":"0","ilanTuru":"0"}
         last_error=None
         for endpoint in ("https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage","https://kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage"):
-            try:
-                resp=p.request.post(endpoint,data=body,
-                  headers={"Referer":"https://kariyerkapisi.gov.tr/"},
-                  timeout=12000)
-                if not resp.ok: raise RuntimeError(f"Kariyer API HTTP {resp.status}")
-                payload=resp.json()
-                if isinstance(payload,dict) and isinstance(payload.get("searchIlan"),list):
-                    return kariyer_rows(payload)
-                raise RuntimeError("Kariyer API searchIlan listesi döndürmedi.")
-            except Exception as exc:
-                last_error=exc
+            for attempt in range(3):
+                try:
+                    resp=p.request.post(endpoint,data=body,
+                      headers={"Referer":"https://kariyerkapisi.gov.tr/","Origin":"https://kariyerkapisi.gov.tr","Accept":"application/json, text/plain, */*"},
+                      timeout=25000)
+                    if not resp.ok: raise RuntimeError(f"Kariyer API HTTP {resp.status}")
+                    payload=resp.json()
+                    if isinstance(payload,dict) and isinstance(payload.get("searchIlan"),list):
+                        return kariyer_rows(payload)
+                    raise RuntimeError("Kariyer API searchIlan listesi döndürmedi.")
+                except Exception as exc:
+                    last_error=exc
+                    if attempt<2: time.sleep(1.5*(2**attempt))
         raise RuntimeError(f"İki resmî Kariyer API adresi yanıt vermedi: {last_error}")
     finally: p.close()
 
@@ -152,39 +160,61 @@ def decode_resmi(response):
     # Resmî Gazete's legacy announcement pages are served as Windows-1254.
     return response.content.decode("windows-1254", errors="replace")
 
+def extract_resmi_pdf(content):
+    try:
+        reader=PdfReader(io.BytesIO(content))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    except Exception as exc:
+        raise RuntimeError(f"Resmî Gazete PDF metni okunamadı: {exc}")
+
 def scrape_resmi():
-    now=datetime.now(timezone.utc)+timedelta(hours=3); out=[]; read_ok=False; errors=[]
-    for off in range(3):
-        d=now.date()-timedelta(days=off); key=d.strftime("%Y%m%d"); index=f"https://www.resmigazete.gov.tr/fihrist?tarih={d.isoformat()}"
+    now=datetime.now(timezone.utc)+timedelta(hours=3); errors=[]
+    for off in range(4):
+        d=now.date()-timedelta(days=off); key=d.strftime("%Y%m%d")
+        index=f"https://www.resmigazete.gov.tr/fihrist?tarih={d.isoformat()}"
+        candidates=[]
         try:
-            r=S.get(index,timeout=12,headers={"Referer":"https://www.resmigazete.gov.tr/"}); r.raise_for_status()
-            soup=BeautifulSoup(decode_resmi(r),"html.parser")
-            a=next((a for a in soup.find_all("a",href=True) if re.search(r"çeşitli\s+il[âa]nlar",tx(a),re.I)),None)
-            candidates=[]
-            if a: candidates.append(urljoin(index,a["href"]))
-            direct=f"https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/{d.year}/{d.month:02d}/{key}-4.htm"
-            if direct not in candidates: candidates.append(direct)
-            for u in candidates:
-                page=S.get(u,timeout=12,headers={"Referer":index}); 
-                if not page.ok: errors.append(f"{d}: HTTP {page.status_code}"); print("Resmî Gazete URL erişim hatası:",u,page.status_code,file=sys.stderr); continue
-                html=decode_resmi(page); body=tx(html)
-                has_section=bool(re.search(r"çeşitli\s+il[âa]nlar",body,re.I))
-                has_recruitment=bool(RE.search(body))
-                if not has_section and not has_recruitment:
-                    print("Resmî Gazete içerik kontrolü:",u,"HTTP",page.status_code,"son URL",page.url,"başlangıç",body[:350],file=sys.stderr)
-                    errors.append(f"{d}: bölüm başlığı/içerik doğrulanamadı")
+            r=S.get(index,timeout=25,headers={"Referer":"https://www.resmigazete.gov.tr/"})
+            if r.ok:
+                soup=BeautifulSoup(decode_resmi(r),"html.parser")
+                for a in soup.find_all("a",href=True):
+                    label=tx(a); href=urljoin(index,a["href"])
+                    if re.search(r"çeşitli\s+il[âa]nlar",label,re.I) or re.search(r"\.pdf(?:$|\?)",href,re.I):
+                        candidates.append(href)
+            else: errors.append(f"{d} fihrist HTTP {r.status_code}")
+        except Exception as exc:
+            errors.append(f"{d} fihrist: {str(exc)[:100]}")
+        candidates.extend([
+            f"https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/{d.year}/{d.month:02d}/{key}-4.htm",
+            f"https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/{d.year}/{d.month:02d}/{key}-4.pdf",
+            f"https://www.resmigazete.gov.tr/eskiler/{d.year}/{d.month:02d}/{key}.pdf"
+        ])
+        checked=set()
+        for u in candidates:
+            if u in checked: continue
+            checked.add(u)
+            try:
+                page=S.get(u,timeout=30,headers={"Referer":index})
+                if not page.ok:
+                    errors.append(f"{d} HTTP {page.status_code} {u.rsplit('/',1)[-1]}")
+                    continue
+                is_pdf=("pdf" in page.headers.get("content-type","").lower() or u.lower().endswith(".pdf") or page.content[:4]==b"%PDF")
+                if is_pdf:
+                    pdf_text=extract_resmi_pdf(page.content)
+                    if len(pdf_text.strip())<100: raise RuntimeError("PDF metni boş veya taranmış görüntü.")
+                    html="<html><body><pre>"+pdf_text.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")+"</pre></body></html>"
+                else:
+                    html=decode_resmi(page)
+                body=tx(html)
+                if not re.search(r"çeşitli\s+il[âa]nlar",body,re.I) and not RE.search(body):
+                    errors.append(f"{d} içerik eşleşmedi: {u.rsplit('/',1)[-1]}")
                     continue
                 found=parse_resmi(html,key,u)
-                read_ok=True
-                out.extend(found)
-                break
-            if read_ok: break
-        except Exception as e:
-            errors.append(f"{d}: {e}")
-            print(f"Resmî Gazete {d}: {e}",file=sys.stderr)
-    if not read_ok:
-        raise RuntimeError("Resmî Gazete son 3 günün Çeşitli İlânlar içeriği okunamadı. "+"; ".join(errors[-3:])[:250])
-    return out[:100]
+                print(f"Resmî Gazete OK {d}: {len(found)} ilan adayı ({'PDF' if is_pdf else 'HTML'})",file=sys.stderr)
+                return found[:150]
+            except Exception as exc:
+                errors.append(f"{d} {u.rsplit('/',1)[-1]}: {str(exc)[:100]}")
+    raise RuntimeError("Resmî Gazete son 4 günün HTML/PDF alternatifleri okunamadı. "+"; ".join(errors[-8:])[:450])
 
 def scrape_osym():
     u="https://www.osym.gov.tr/SinavGrubu/Index/3"; r=S.get(u,timeout=15); r.raise_for_status()
@@ -285,6 +315,7 @@ def scrape_sbb(browser):
     finally: p.close()
 
 SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":scrape_ilan,"kamuilan-sbb":scrape_sbb,"iskur":scrape_iskur}
+SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":360,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"iskur":240}
 def report(sid,items=None,error=None):
     if not TOKEN: raise RuntimeError("MEMURPRO_INGEST_TOKEN secret is missing")
     r=requests.post(API+"/api/ingest",headers={"x-admin-token":TOKEN},json={"sourceId":sid,"items":items or [],"error":error},timeout=30); r.raise_for_status(); return r.json()
@@ -300,7 +331,16 @@ def main():
                 backoff=src.get("backoffUntil")
                 if backoff:
                     try:
-                        if datetime.fromisoformat(backoff.replace("Z","+00:00"))>now: print("BACKOFF",sid); continue
+                        if datetime.fromisoformat(backoff.replace("Z","+00:00"))>now:
+                            print("BACKOFF",sid,"yeniden deneme",backoff); continue
+                    except ValueError: pass
+                checked=src.get("checkedAt")
+                if checked and src.get("status") not in ("failed","degraded"):
+                    try:
+                        last=datetime.fromisoformat(checked.replace("Z","+00:00"))
+                        interval=SOURCE_INTERVAL_MINUTES.get(sid,120)
+                        if (now-last).total_seconds()<interval*60:
+                            print("INTERVAL SKIP",sid,f"{interval} dk dolmadı"); continue
                     except ValueError: pass
                 try:
                     items=[x for x in scraper(browser) if keep(x)]
