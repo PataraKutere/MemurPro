@@ -932,15 +932,14 @@ function bindEvents() {
   $('#searchInput').addEventListener('keydown', event => { if (event.key === 'Enter') bindFilters(); });
   $('#sortFilter').addEventListener('change', renderListings);
   ['sourceFilter','cityFilter','educationFilter','scoreFilter','employmentTypeFilter','institutionTypeFilter','announcementTypeFilter','openOnlyFilter'].forEach(id => $(`#${id}`)?.addEventListener('change', bindFilters));
-  $('#educationFilter')?.addEventListener('change', () => {
+  const updateScoreSuggestion = () => {
     const mapping = { 'Ön lisans': 'P93', 'Lisans': 'P3', 'Ortaöğretim': 'P94' };
-    const score = $('#scoreFilter');
-    if (score && mapping[$('#educationFilter').value] && (!score.value || score.dataset.autoSuggested === 'true')) {
-      score.value = mapping[$('#educationFilter').value]; score.dataset.autoSuggested = 'true';
-    }
-    bindFilters();
-  });
-  $('#scoreFilter')?.addEventListener('change', event => { event.target.dataset.autoSuggested = 'false'; bindFilters(); });
+    const suggestion = mapping[$('#educationFilter')?.value || ''];
+    const hint = $('#scoreSuggestion');
+    if (hint) hint.textContent = suggestion ? `Önerilen KPSS puan türü: ${suggestion}. Bu bir öneridir; puan filtresini ayrıca seçmelisin.` : 'Öğrenim düzeyi seçildiğinde uygun KPSS türü önerilir.';
+  };
+  $('#educationFilter')?.addEventListener('change', () => { updateScoreSuggestion(); bindFilters(); });
+  updateScoreSuggestion();
   $('#clearFilters').addEventListener('click', () => {
     ['searchInput','departmentFilter','cityFilter','educationFilter','scoreFilter','employmentTypeFilter','institutionTypeFilter','announcementTypeFilter','sourceFilter'].forEach(id => { if ($(`#${id}`)) $(`#${id}`).value = ''; });
     if ($('#openOnlyFilter')) $('#openOnlyFilter').checked = true;
