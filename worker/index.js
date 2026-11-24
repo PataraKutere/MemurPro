@@ -781,9 +781,11 @@ async function syncConfiguredSources(env) {
     const lastChecked = source.last_checked_at ? Date.parse(source.last_checked_at) : NaN;
     const normalInterval = minIntervals[source.id] || 60 * 60 * 1000;
     // Hatalı/bozulmuş kaynakları günlük normal aralığı beklemeden yeniden dene.
+    const pendingAge = Number.isFinite(lastChecked) ? now - lastChecked : 0;
+    const stalePending = source.id !== 'iskur' && source.status === 'pending' && pendingAge > 10 * 60 * 1000;
     const minInterval = ['failed', 'degraded'].includes(source.status)
       ? 15 * 60 * 1000
-      : normalInterval;
+      : stalePending ? 5 * 60 * 1000 : normalInterval;
     const nowIso = new Date(now).toISOString();
     const cutoffIso = new Date(now - minInterval).toISOString();
 
