@@ -130,6 +130,10 @@ async function hashText(text) {
 }
 
 
+function turkeyToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(new Date());
+}
+
 function normalizeIngestItem(item, source) {
   const title = safeText(item?.title, 500);
   const institution = safeText(item?.institution, 500);
@@ -140,7 +144,7 @@ function normalizeIngestItem(item, source) {
   if (!['http:', 'https:'].includes(parsed.protocol)) return null;
   const endDate = normalizeDateOnly(item.endDate);
   const startDate = normalizeDateOnly(item.startDate);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = turkeyToday();
   const explicitOpen = item.status === 'open' && Boolean(endDate) && endDate >= today && (!startDate || startDate <= today);
   const status = endDate && endDate < today ? 'closed' : explicitOpen ? 'open' : 'check_required';
   const positionCount = Number.isInteger(Number(item.positionCount)) && Number(item.positionCount) > 0 ? Number(item.positionCount) : null;
@@ -303,8 +307,9 @@ async function getListings(request, env) {
   const category = safeText(url.searchParams.get('type'), 100);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 500), 1), 500);
 
-  let sql = `SELECT id, title, institution, summary, category, city, education, score_type AS scoreType, minimum_score AS minimumScore, published_at AS publishedAt, start_date AS startDate, end_date AS endDate, detail_url AS url, source_name AS sourceName, status, source_refs AS sourceRefs, publication_state AS publicationState, position_count AS positionCount FROM announcements WHERE status IN ('open','check_required') AND publication_state NOT IN ('expired','invalid')`;
-  const params = [];
+  const today = turkeyToday();
+  let sql = `SELECT id, title, institution, summary, category, city, education, score_type AS scoreType, minimum_score AS minimumScore, published_at AS publishedAt, start_date AS startDate, end_date AS endDate, detail_url AS url, source_name AS sourceName, status, source_refs AS sourceRefs, publication_state AS publicationState, position_count AS positionCount FROM announcements WHERE status IN ('open','check_required') AND publication_state NOT IN ('expired','invalid') AND (end_date IS NULL OR end_date >= ?)`;
+  const params = [today];
   if (q) { sql += ` AND (title LIKE ? OR institution LIKE ? OR summary LIKE ?)`; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
   if (city) { sql += ` AND (city = ? OR city = 'Türkiye Geneli')`; params.push(city); }
   if (education) { sql += ` AND education = ?`; params.push(education); }
