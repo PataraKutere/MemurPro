@@ -2,6 +2,7 @@ import json, os, re, sys, time, io
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -30,6 +31,41 @@ def decode(r):
     return r.content.decode("windows-1254",errors="replace")
 def local_today():
     return datetime.now(ZoneInfo("Europe/Istanbul")).date().isoformat()
+
+_ROBOTS_CACHE={}
+def robots_check(url):
+    parsed=urlparse(url)
+    if parsed.scheme not in ("http","https") or not parsed.netloc:
+        return False,"geçersiz kaynak URL'si"
+    origin=f"{parsed.scheme}://{parsed.netloc}"
+    if origin not in _ROBOTS_CACHE:
+        robots_url=origin+"/robots.txt"
+        try:
+            response=S.get(robots_url,timeout=10,headers={"Accept":"text/plain"})
+            if response.status_code in (404,410):
+                parser=RobotFileParser()
+                parser.parse([])
+                _ROBOTS_CACHE[origin]=(parser,None)
+            elif response.status_code>=400:
+                _ROBOTS_CACHE[origin]=(None,f"robots.txt HTTP {response.status_code}")
+            else:
+                parser=RobotFileParser()
+                parser.set_url(robots_url)
+                parser.parse(decode(response).splitlines())
+                _ROBOTS_CACHE[origin]=(parser,None)
+        except Exception as exc:
+            _ROBOTS_CACHE[origin]=(None,f"robots.txt okunamadı: {str(exc)[:120]}")
+    parser,error=_ROBOTS_CACHE[origin]
+    if error:
+        return False,error
+    if not parser.can_fetch("MemurPro",url):
+        return False,"robots.txt bu URL'nin taranmasına izin vermiyor"
+    return True,None
+
+def require_robots_permission(url):
+    allowed,reason=robots_check(url)
+    if not allowed:
+        raise RuntimeError(reason or "robots.txt taramaya izin vermiyor")
 
 def date(v):
     v=tx(v)
@@ -475,6 +511,7 @@ def scrape_iskur_memur(browser):
             start_date=None
             if link and detail.lower().split("?")[0].endswith(".pdf"):
                 try:
+                    require_robots_permission(detail)
                     pdf_response=S.get(detail,timeout=30,headers={"Referer":"https://www.iskur.gov.tr/"})
                     pdf_response.raise_for_status()
                     reader=PdfReader(io.BytesIO(pdf_response.content))
@@ -602,6 +639,17 @@ def main():
                             print("INTERVAL SKIP",sid,f"{interval} dk dolmadı"); continue
                     except ValueError: pass
                 try:
+                    targets={
+                        "kariyer-kapisi":"https://kariyerkapisi.gov.tr/isealim",
+                        "resmi-gazete":"https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/",
+                        "osym":"https://www.osym.gov.tr/SinavGrubu/Index/3",
+                        "ilan-gov":"https://www.ilan.gov.tr/ilan/kategori/8/kamu-akademik-personel?ats=5",
+                        "kamuilan-sbb":"https://kamuilan.sbb.gov.tr/",
+                        "sbb-kurum-duyurulari":"https://www.sbb.gov.tr/tumu/",
+                        "iskur":"https://esube.iskur.gov.tr/Istihdam/AcikIsIlanAra.aspx",
+                        "iskur-kamu-memur":src.get("homepageUrl") or "https://www.iskur.gov.tr/ilanlar/kamu-memur-alim-ilanlari/"
+                    }
+                    require_robots_permission(targets.get(sid) or src.get("homepageUrl") or "")
                     items=[x for x in scraper(browser) if keep(x)]
                     if dry:
                         results.append({"source":sid,"status":"connected","count":len(items),"dryRun":True})
