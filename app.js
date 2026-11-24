@@ -512,8 +512,9 @@ function renderSourceStatuses(sources) {
     const degraded = sources.filter(source => source.status === 'degraded').length;
     const pending = sources.filter(source => source.status === 'pending').length;
     const connected = sources.filter(source => source.status === 'connected').length;
+    const activeListings = state.listings.filter(item => item.status === 'open').length;
     const detail = checked ? `Son kaynak kontrolü: ${checked.toLocaleString('tr-TR')}` : 'Henüz kaynak kontrol kaydı yok.';
-    const status = `GitHub Actions kaynak taraması planlı · 30 dakikada bir · ${connected} ilan akışı bağlı, ${degraded} site açık/akış hatalı, ${failed} erişilemiyor, ${pending} beklemede. ${detail}`;
+    const status = `Kaynak başına farklı aralıklarla otomatik tarama · ${connected}/${sources.length} kaynak bağlı · ${state.listings.length} kayıt, ${activeListings} açık başvuru · ${degraded} kısmi sorun, ${failed} erişilemiyor, ${pending} beklemede. ${detail}`;
     const label = $('span:last-child', footnote);
     if (label) label.textContent = status;
     footnote.title = status;
@@ -532,7 +533,9 @@ function renderSourceStatuses(sources) {
     const details = [];
     if (source.lastError) details.push(source.lastError);
     else if (source.checkedAt) details.push(`Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`);
-    else details.push('GitHub Actions ilk veri aktarımı bekleniyor.');
+    else details.push('İlk başarılı veri aktarımı bekleniyor.');
+    if (source.lastSuccessAt) details.push(`Son başarılı: ${new Date(source.lastSuccessAt).toLocaleString('tr-TR')}`);
+    if (source.successRate24h !== null && source.successRate24h !== undefined) details.push(`24 saat başarı: ${source.successRate24h}% (${source.successes24h}/${source.checks24h})`);
     if (source.failureCount) details.push(`${source.failureCount} ardışık hata`);
     if (source.backoffUntil) details.push(`Yeniden deneme: ${new Date(source.backoffUntil).toLocaleString('tr-TR')}`);
     if (detailEl) {
