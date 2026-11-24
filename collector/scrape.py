@@ -34,7 +34,7 @@ def item(sid,eid,title,inst,url,summary="",**kw):
       "publishedAt":kw.get("publishedAt"),"startDate":kw.get("startDate"),"endDate":kw.get("endDate"),
       "positionCount":kw.get("positionCount"),"detailUrl":url,"status":kw.get("status","check_required")}
 def keep(x):
-    return bool(x["title"] and x["detailUrl"] and not BAD.search(x["title"]) and (RE.search(x["title"]+" "+x["summary"]) or x["category"]=="KPSS"))
+    return bool(x["title"] and x["detailUrl"] and not BAD.search(x["title"]) and (RE.search(x["title"]+" "+x["summary"]) or x["category"] in ("KPSS","Memur","İşçi","Akademik Personel")))
 
 def sbb_html(html):
     soup=BeautifulSoup(html,"html.parser"); out=[]; seen=set()
@@ -45,13 +45,6 @@ def sbb_html(html):
         inst=clean.split(" - ")[0] if " - " in clean else "Kamu kurumu"
         out.append(item("kamuilan-sbb",m.group(1),clean,inst,u,"SBB Kamu İlan Portalı kaydı; koşul ve tarihler resmî ilan metninden doğrulanmalı.",category="Memur"))
     return out[:150]
-def scrape_sbb(browser):
-    p=browser.new_page()
-    try:
-        p.goto("https://kamuilan.sbb.gov.tr/",wait_until="domcontentloaded",timeout=25000); p.wait_for_timeout(1500)
-        return sbb_html(p.content())
-    finally: p.close()
-
 def kariyer_rows(payload):
     rows=payload.get("searchIlan") if isinstance(payload,dict) else None
     if not isinstance(rows,list): return []
@@ -166,6 +159,13 @@ def scrape_iskur(browser):
             out.append(item("iskur",href,title,"İŞKUR aracılığıyla kamu işçi alımı",href,tx(row),category="İşçi"))
         if not out: raise RuntimeError("Kamu filtresinde oturumsuz okunabilir ilan listesi yok.")
         return out[:100]
+    finally: p.close()
+
+def scrape_sbb(browser):
+    p=browser.new_page()
+    try:
+        p.goto("https://kamuilan.sbb.gov.tr/",wait_until="domcontentloaded",timeout=25000); p.wait_for_timeout(1500)
+        return sbb_html(p.content())
     finally: p.close()
 
 SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":lambda b:scrape_ilan(),"kamuilan-sbb":scrape_sbb,"iskur":scrape_iskur}
