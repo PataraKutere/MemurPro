@@ -675,6 +675,11 @@ async function loadLiveData() {
     return payload;
   } catch (error) {
     state.apiStatus = 'error'; state.apiError = error?.message || 'Bilinmeyen bağlantı hatası';
+    const sourceCount = $('.source-total');
+    if (sourceCount) sourceCount.textContent = 'Kaynak verisi alınamadı';
+    const sourceFootnote = $('#sourceAutomationStatus');
+    const sourceLabel = $('span:last-child', sourceFootnote);
+    if (sourceLabel) sourceLabel.textContent = `Kaynak durumları API'den alınamadı: ${state.apiError}`;
     renderListings(); renderLatestListings();
     return null;
   }
