@@ -286,7 +286,7 @@ function assessListing(listing) {
     const requirementText = normalizeSearchText([listing.education, listing.summary, listing.title].filter(Boolean).join(' '));
     if (!requirementText) markUnknown('İlanın bölüm şartı kaynak verisinde yok.');
     else if (requirementText.includes(normalizeSearchText(p.department))) markPass(`${p.department} bölüm/program adı ilanda geçiyor.`);
-    else markFail(`İlan metninde ${p.department} bölüm/programı bulunamadı; resmî şartları kontrol et.`);
+    else markUnknown(`İlan metninde ${p.department} bölüm/programı doğrulanamadı; tam ilan şartını kontrol et.`);
   }
   if (p.education) {
     const listingEducation = normalizeEducation([listing.education, listing.summary].filter(Boolean).join(' '));
