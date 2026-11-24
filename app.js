@@ -331,7 +331,7 @@ function assessListing(listing) {
     const listingEducation = normalizeEducation([listing.education, listing.summary].filter(Boolean).join(' '));
     const candidateEducation = normalizeEducation(p.education);
     if (!listingEducation) markUnknown('İlanın öğrenim şartı kaynak verisinde yok.');
-    else if (listingEducation.includes(candidateEducation)) markPass('Öğrenim düzeyi ilan metninde eşleşiyor.');
+    else if (listingEducation === candidateEducation) markPass('Öğrenim düzeyi ilan metninde eşleşiyor.');
     else markFail(`İlanın öğrenim şartı profilindeki ${p.education} düzeyiyle eşleşmiyor.`);
   }
   if (p.scoreType) {
