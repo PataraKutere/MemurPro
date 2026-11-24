@@ -334,3 +334,5 @@ body{background:#0b1020;color:#e7ebf5}
 .backup-actions{display:flex;gap:8px;flex-wrap:wrap}
 @media(max-width:620px){.backup-toolbar{align-items:flex-start;flex-direction:column}.backup-actions{width:100%}.backup-actions button{flex:1}}
 .source-state.connected{max-width:190px;text-align:right}
+
+.field-hint{display:block;margin-top:5px;color:var(--muted,#667085);font-size:11px;line-height:1.45}
