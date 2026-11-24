@@ -108,6 +108,16 @@ function listingFact(label, value) {
   return `<div class="listing-fact"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value || 'Kaynakta belirtilmemiş')}</strong></div>`;
 }
 
+function isResmiGazeteListing(listing) {
+  return normalizeSearchText(listing?.sourceName).includes('resmî gazete');
+}
+
+function compactText(value, limit) {
+  const text = String(value || '').replace(/\\s+/g, ' ').trim();
+  if (text.length <= limit) return text;
+  return text.slice(0, limit).replace(/\\s+\\S*$/, '').trimEnd() + '…';
+}
+
 function safeListingUrl(value) {
   try {
     const url = new URL(String(value || ''));
@@ -137,7 +147,7 @@ function listingCard(listing) {
         ${listingFact('Aranan bölümler / öğrenim', education)}
         ${listingFact('KPSS şartı ve puan', score)}
       </div>
-      ${listing.summary ? `<p class="listing-summary">${escapeHTML(listing.summary)}</p>` : ''}
+      ${listing.summary ? `<p class="listing-summary">${escapeHTML(isResmiGazeteListing(listing) ? compactText(listing.summary, 240) : listing.summary)}</p>` : ''}
       ${eligibilityMarkup(listing)}
       <div class="listing-meta">${chips}<span class="listing-status">${escapeHTML(status)}</span><span class="meta-chip">Kaynak: ${escapeHTML(listing.sourceName || 'Resmî kaynak')}</span></div>
     </div>
@@ -788,7 +798,9 @@ function openListingDetails(id) {
       ${listingFact('İlan türü', listing.category || 'Kaynakta belirtilmemiş')}
       ${listingFact('Başvuru durumu', status)}
     </div>
-    <section class="detail-description"><h3>İlan açıklaması</h3><p>${escapeHTML(listing.summary || 'Kaynak tarafından ayrıca bir açıklama sağlanmamış. Ayrıntılar için resmî duyuruyu incele.')}</p></section>
+    <section class="detail-description"><h3>İlan açıklaması</h3>${isResmiGazeteListing(listing) && String(listing.summary || '').length > 900
+      ? `<p>${escapeHTML(compactText(listing.summary, 650))}</p><details class="full-listing-text"><summary>Tam Resmî Gazete metnini göster</summary><p>${escapeHTML(listing.summary)}</p></details>`
+      : `<p>${escapeHTML(listing.summary || 'Kaynak tarafından ayrıca bir açıklama sağlanmamış. Ayrıntılar için resmî duyuruyu incele.')}</p>`}</section>
     ${eligibilityMarkup(listing)}
     <div class="detail-dialog-actions">${url ? `<a class="details-button" href="${escapeHTML(url)}" target="_blank" rel="noopener">Resmî ilanı aç ↗</a>` : '<span class="detail-no-link">Resmî bağlantı kaynak verisinde yok.</span>'}</div>
     <p class="detail-warning">Bu kart kaynaklardan alınabilen bilgilerin özetidir. Eksik şartlar, özel koşullar, belgeler ve başvuru yöntemi için resmî ilan metni ve ekleri esas alınmalıdır.</p>`;
