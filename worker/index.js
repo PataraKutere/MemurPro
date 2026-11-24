@@ -259,7 +259,7 @@ async function ingestBatch(request, env) {
 }
 
 async function getSources(env) {
-  const result = await env.DB.prepare(`SELECT id, name, homepage_url AS homepageUrl, feed_type AS feedType, adapter, status, last_checked_at AS checkedAt, last_error AS lastError, failure_count AS failureCount, backoff_until AS backoffUntil FROM sources ORDER BY name`).all();
+  const result = await env.DB.prepare(`SELECT id, name, homepage_url AS homepageUrl, feed_type AS feedType, adapter, status, last_checked_at AS checkedAt, last_error AS lastError, failure_count AS failureCount, backoff_until AS backoffUntil, enabled FROM sources ORDER BY name`).all();
   return result.results || [];
 }
 
@@ -272,7 +272,7 @@ async function getListings(request, env) {
   const category = safeText(url.searchParams.get('type'), 100);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100), 1), 200);
 
-  let sql = `SELECT id, title, institution, summary, category, city, education, score_type AS scoreType, minimum_score AS minimumScore, published_at AS publishedAt, start_date AS startDate, end_date AS endDate, detail_url AS url, source_name AS sourceName, status FROM announcements WHERE status IN ('open','check_required')`;
+  let sql = `SELECT id, title, institution, summary, category, city, education, score_type AS scoreType, minimum_score AS minimumScore, published_at AS publishedAt, start_date AS startDate, end_date AS endDate, detail_url AS url, source_name AS sourceName, status, source_refs AS sourceRefs, publication_state AS publicationState, position_count AS positionCount FROM announcements WHERE status IN ('open','check_required') AND publication_state NOT IN ('expired','invalid')`;
   const params = [];
   if (q) { sql += ` AND (title LIKE ? OR institution LIKE ? OR summary LIKE ?)`; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
   if (city) { sql += ` AND (city = ? OR city = 'Türkiye Geneli')`; params.push(city); }
