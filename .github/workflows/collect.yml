@@ -41,13 +41,14 @@ jobs:
         id: ingest-secret
         env:
           TOKEN: ${{ secrets.MEMURPRO_INGEST_TOKEN }}
+        shell: pwsh
         run: |
-          if [ -n "$TOKEN" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::MEMURPRO_INGEST_TOKEN is missing; scheduled collection will be skipped."
-          fi
+          if ($env:TOKEN) {
+            "enabled=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "enabled=false" >> $env:GITHUB_OUTPUT
+            Write-Output "::warning::MEMURPRO_INGEST_TOKEN is missing; scheduled collection will be skipped."
+          }
       - name: Install Python dependencies
         if: steps.ingest-secret.outputs.enabled == 'true'
         run: |
