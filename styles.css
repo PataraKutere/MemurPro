@@ -172,3 +172,22 @@ body{background:#0d1523;color:#e4eaf4}
 .listing-card .listing-status{white-space:nowrap}
 @media(max-width:850px){.listing-facts{grid-template-columns:1fr 1fr}.listing-fact:first-child{grid-column:1/-1}}
 @media(max-width:620px){.listing-facts{grid-template-columns:1fr;gap:7px}.listing-fact:first-child{grid-column:auto}.listing-card h3{font-size:14px}.listing-fact{padding:9px 10px}.listing-actions{justify-content:flex-start}}
+
+
+/* Full announcement detail dialog */
+.listing-detail-dialog{width:min(760px,calc(100vw - 28px));max-height:min(86vh,900px);padding:0;border:1px solid #3a4a60;border-radius:16px;background:#111c2b;color:#e4eaf4;box-shadow:0 24px 90px rgba(0,0,0,.55)}
+.listing-detail-dialog::backdrop{background:rgba(3,8,16,.78);backdrop-filter:blur(3px)}
+.detail-dialog-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:19px 22px;border-bottom:1px solid #2b3a50;background:#172438}
+.detail-dialog-head h2{margin:6px 0 0;font:800 18px/1.4 Manrope,sans-serif;color:#f0f4fb}
+.dialog-close{width:34px;height:34px;border:1px solid #40516a;border-radius:9px;background:#202f45;color:#e4eaf4;font-size:22px;cursor:pointer}
+.detail-dialog-content{padding:20px 22px 23px;overflow:auto}
+.detail-institution{font-size:11px;font-weight:700;color:#aebbd0;margin-bottom:13px}
+.detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.detail-description{margin-top:17px;padding:14px;border:1px solid #2d3c53;border-radius:10px;background:#172438}
+.detail-description h3{margin:0 0 7px;font-size:11px;color:#e3eaf5}
+.detail-description p{margin:0;color:#aab8ca;font-size:10px;line-height:1.7;white-space:pre-line}
+.detail-dialog-actions{display:flex;justify-content:flex-start;margin-top:16px}
+.detail-no-link{font-size:10px;color:#aab8ca}
+.detail-warning{margin:14px 0 0;color:#899ab1;font-size:9px;line-height:1.6}
+.listing-actions .official-link{background:#263650;color:#c7d4e8}
+@media(max-width:620px){.listing-detail-dialog{width:calc(100vw - 16px);max-height:90vh;border-radius:13px}.detail-dialog-head{padding:15px}.detail-dialog-content{padding:15px}.detail-facts{grid-template-columns:1fr}.listing-actions{flex-wrap:wrap}}
