@@ -96,6 +96,10 @@ JSON akışı aşağıdaki normalize edilmiş alanları içermelidir:
 `status: open` yalnızca kaynak başvurunun açık olduğunu ve son tarihi gerçekten verdiğinde kullanılmalıdır. RSS'den gelen ve başvuru bitişi bilinmeyen kayıtlar `check_required` olarak saklanır; kesin açık ilan gibi sunulmaz.
 
 
+## Kaynak erişim politikası
+
+Collector, taramadan önce ilgili kaynak URL'sinin `robots.txt` kurallarını kontrol eder. Erişim izni yoksa veya robots dosyası güvenilir biçimde okunamıyorsa o kaynak / PDF isteği atlanır ve durum kaydedilir. Kariyer Kapısı ve İlan.gov.tr API yolları da ayrıca kontrol edilir. `robots.txt` kontrolü kullanım koşullarının yerine geçmez; yeni kaynak eklenmeden önce kurumun kullanım koşulları ayrıca incelenmelidir. CAPTCHA, oturum, IP engeli veya başka bir erişim kontrolünü aşmaya çalışılmaz.
+
 ## Kaynak erişiminde yerel runner seçeneği
 
 GitHub-hosted Linux runner bazı resmî sitelerde IP tabanlı HTTP 403/406 engeline takılabilir. Bu engeli atlatmaya çalışmak yerine, yalnızca kendi güvendiğin bilgisayarda çalışan bir GitHub self-hosted runner seçeneği eklenmiştir.
