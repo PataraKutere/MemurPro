@@ -100,7 +100,7 @@ async function hashText(text) {
 }
 
 async function getSources(env) {
-  const result = await env.DB.prepare(`SELECT id, name, homepage_url AS homepageUrl, feed_type AS feedType, status, last_checked_at AS checkedAt, last_error AS lastError FROM sources ORDER BY name`).all();
+  const result = await env.DB.prepare(`SELECT id, name, homepage_url AS homepageUrl, feed_type AS feedType, adapter, status, last_checked_at AS checkedAt, last_error AS lastError FROM sources ORDER BY name`).all();
   return result.results || [];
 }
 
@@ -126,7 +126,76 @@ async function getListings(request, env) {
   return rows.results || [];
 }
 
+function parseOsymKpssPage(html, source) {
+  const months = { 'ocak':'01','şubat':'02','mart':'03','nisan':'04','mayıs':'05','haziran':'06','temmuz':'07','ağustos':'08','eylül':'09','ekim':'10','kasım':'11','aralık':'12' };
+  const matches = [...html.matchAll(/<a\\b([^>]*)>([\\s\\S]*?)<\\/a>/gi)];
+  const seen = new Set();
+  const items = [];
+
+  for (const match of matches) {
+    const attrs = match[1] || '';
+    const inner = match[2] || '';
+    const hrefMatch = attrs.match(/href\\s*=\\s*["']([^"']+)["']/i);
+    if (!hrefMatch) continue;
+
+    const title = xmlText(inner);
+    if (!/kpss/i.test(title) || title.trim().length < 12) continue;
+
+    let detailUrl;
+    try {
+      detailUrl = new URL(hrefMatch[1], source.homepage_url).toString();
+      const parsed = new URL(detailUrl);
+      if (parsed.hostname !== 'www.osym.gov.tr' && parsed.hostname !== 'osym.gov.tr') continue;
+      if (/SinavGrubu\\/Index\\/3/i.test(parsed.pathname)) continue;
+    } catch {
+      continue;
+    }
+    if (seen.has(detailUrl)) continue;
+    seen.add(detailUrl);
+
+    let publishedAt = null;
+    const dateMatch = title.match(/(\\d{1,2})\\s+(Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)\\s+(\\d{4})/i);
+    if (dateMatch) {
+      const day = dateMatch[1].padStart(2, '0');
+      const month = months[dateMatch[2].toLocaleLowerCase('tr-TR')];
+      if (month) publishedAt = new Date(`${dateMatch[3]}-${month}-${day}T00:00:00+03:00`).toISOString();
+    }
+
+    items.push({
+      externalId: detailUrl,
+      title,
+      institution: 'ÖSYM',
+      summary: 'ÖSYM KPSS duyurusu. Ayrıntılar ve başvuru koşulları için resmî duyuru sayfasını inceleyin.',
+      category: 'KPSS',
+      detailUrl,
+      publishedAt,
+      sourceName: source.name,
+      status: 'check_required'
+    });
+  }
+  return items.slice(0, 100);
+}
+
 async function fetchFeed(source) {
+  if (source.adapter === 'osym-kpss') {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(source.feed_url || 'https://www.osym.gov.tr/SinavGrubu/Index/3', {
+        signal: controller.signal,
+        headers: { 'user-agent': 'MemurPro/0.1 (+public-announcement-monitor)', 'accept': 'text/html,application/xhtml+xml' },
+        redirect: 'follow'
+      });
+      if (!response.ok) throw new Error(`ÖSYM sayfası HTTP ${response.status} döndürdü.`);
+      const html = await response.text();
+      if (html.length > 3_000_000) throw new Error('ÖSYM sayfası güvenli boyut sınırını aşıyor.');
+      const items = parseOsymKpssPage(html, source);
+      if (!items.length) throw new Error('ÖSYM sayfasında ayrıştırılabilir KPSS duyurusu bulunamadı.');
+      return { items };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
   if (!source.feed_url || !['rss', 'json'].includes(source.feed_type)) {
     return { skipped: true, reason: 'Doğrulanmış herkese açık RSS/JSON akışı henüz tanımlanmadı.' };
   }
@@ -200,7 +269,7 @@ async function syncOneSource(source, env) {
 }
 
 async function syncConfiguredSources(env) {
-  const result = await env.DB.prepare(`SELECT id, name, homepage_url, feed_url, feed_type, enabled FROM sources WHERE enabled=1`).all();
+  const result = await env.DB.prepare(`SELECT id, name, homepage_url, feed_url, feed_type, adapter, enabled FROM sources WHERE enabled=1`).all();
   const sources = result.results || [];
   const outcomes = [];
   // Keep concurrency low to avoid stressing public endpoints.
