@@ -125,6 +125,20 @@ def kariyer_rows(payload):
     return out
 def scrape_kariyer(browser):
     p=browser.new_page(); captured=[]; api_urls=[]
+    api_endpoints=[
+        "https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage",
+        "https://kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage"
+    ]
+    api_permissions={endpoint:robots_check(endpoint)[0] for endpoint in api_endpoints}
+    def guard_robots(route):
+        request_url=route.request.url
+        if "GetIseAlimPage" in request_url:
+            allowed=any(request_url.startswith(endpoint) and api_permissions.get(endpoint,False) for endpoint in api_endpoints)
+            if not allowed:
+                route.abort()
+                return
+        route.continue_()
+    p.route("**/*",guard_robots)
     def on_request(req):
         if req.resource_type in ("xhr","fetch") and "/api/" in req.url:
             api_urls.append(req.url)
@@ -345,6 +359,7 @@ def parse_ilan_payload(payload):
 
 def scrape_ilan(browser):
     p=browser.new_page(); captured=[]
+    require_robots_permission("https://www.ilan.gov.tr/api/api/services/app/Ad/AdsByFilter")
     endpoint="/api/api/services/app/Ad/AdsByFilter"
     def on_response(resp):
         if endpoint in resp.url:
@@ -601,8 +616,16 @@ def scrape_sbb_official():
 def scrape_sbb(browser):
     p=browser.new_page()
     try:
-        response=p.goto("https://kamuilan.sbb.gov.tr/",wait_until="domcontentloaded",timeout=25000)
-        if response and response.status>=400: raise RuntimeError(f"SBB portal HTTP {response.status}")
+        target="https://kamuilan.sbb.gov.tr/"
+        require_robots_permission(target)
+        response=p.goto(target,wait_until="domcontentloaded",timeout=25000)
+        if response and response.status>=400:
+            headers=response.headers
+            try: body_sample=tx(p.locator("body").inner_text())[:450]
+            except Exception: body_sample=""
+            details={key:headers.get(key) for key in ("content-type","server","cf-ray","retry-after") if headers.get(key)}
+            print("SBB HTTP yanıtı:",response.status,"headers:",details,"body:",body_sample,file=sys.stderr)
+            raise RuntimeError(f"SBB portal HTTP {response.status}; headers={details}; body={body_sample}")
         p.wait_for_timeout(1500)
         page_text=tx(p.locator("body").inner_text())
         if re.search(r"access denied|forbidden|captcha|robot doğrulama",page_text,re.I):
