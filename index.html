@@ -6,11 +6,16 @@
   <meta name="theme-color" content="#0b1020">
   <meta name="description" content="MemurPro ile kamu personel alımlarını, KPSS duyurularını ve başvuru tarihlerini tek yerde takip edin.">
   <title>MemurPro — Kamu İlanları Takip Merkezi</title>
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="tr_TR">
+  <meta property="og:title" content="MemurPro — Kamu İlanları Takip Merkezi">
+  <meta property="og:description" content="Kamu personel alımlarını tek ekranda takip et; bölüm, şehir ve KPSS puan türüne göre filtrele.">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <noscript><p style="margin:0;padding:12px 16px;background:#fff3cd;color:#3d2f00;text-align:center">MemurPro'nun çalışması için JavaScript gerekir. Lütfen tarayıcında JavaScript'i etkinleştir.</p></noscript>
   <div class="app-shell">
     <aside class="sidebar" aria-label="Ana menü">
       <a class="brand" href="#overview" aria-label="MemurPro ana sayfa">
@@ -20,10 +25,10 @@
 
       <div class="sidebar-label">ÇALIŞMA ALANI</div>
       <nav class="main-nav">
-        <button class="nav-link active" data-view="overview"><span class="nav-icon">▦</span><span>Genel Bakış</span></button>
-        <button class="nav-link" data-view="listings"><span class="nav-icon">▤</span><span>Kamu İlanları</span><span class="nav-arrow">›</span></button>
-        <button class="nav-link" data-view="saved"><span class="nav-icon">☆</span><span>Takip Listem</span><span class="saved-count" id="savedCount">0</span></button>
-        <button class="nav-link" data-view="tools"><span class="nav-icon">⌘</span><span>Araçlar</span></button>
+        <button class="nav-link active" data-view="overview"><span aria-hidden="true" class="nav-icon">▦</span><span>Genel Bakış</span></button>
+        <button class="nav-link" data-view="listings"><span aria-hidden="true" class="nav-icon">▤</span><span>Kamu İlanları</span><span aria-hidden="true" class="nav-arrow">›</span></button>
+        <button class="nav-link" data-view="saved"><span aria-hidden="true" class="nav-icon">☆</span><span>Takip Listem</span><span class="saved-count" id="savedCount">0</span></button>
+        <button class="nav-link" data-view="tools"><span aria-hidden="true" class="nav-icon">⌘</span><span>Araçlar</span></button>
       </nav>
 
       <div class="sidebar-spacer"></div>
@@ -51,8 +56,8 @@
         </div>
 
         <div class="notice-banner" role="status">
-          <span class="notice-symbol">!</span>
-          <div><strong>MemurPro veri bağlantıları hazırlanıyor</strong><p>Bu ön izleme sürümünde henüz doğrulanmış canlı ilan akışı yok. Gerçek ilanlar bağlanana kadar örnek ilan gösterilmeyecek.</p></div>
+          <span aria-hidden="true" class="notice-symbol">!</span>
+          <div><strong>Veri kaynaklarının durumu</strong><p>Her kaynağın son kontrol sonucu aşağıdaki listede gösterilir. Erişilemeyen kaynaklardan ilan gösterilmez; örnek ilan üretilmez.</p></div>
           <span class="preview-pill">ÖN İZLEME</span>
         </div>
 
@@ -69,26 +74,26 @@
             <div class="section-head"><div><div class="panel-kicker">VERİ KAYNAKLARI</div><h2>Resmî kaynaklar</h2></div><div class="source-controls"><span class="source-total">8 kaynak</span><button class="text-button" id="refreshSources" type="button">Şimdi kontrol et ↻</button></div></div>
             <p class="muted small-copy">İlanlar doğrudan duyuruyu yayımlayan kurumdan doğrulanacak.</p>
             <div class="source-list" id="sourceList">
-              <a class="source-row" href="https://kariyerkapisi.gov.tr/" target="_blank" rel="noopener"><span class="source-icon blue">KK</span><span class="source-copy"><strong>Kariyer Kapısı</strong><small>Kamu işe alım ilanları</small></span><span class="source-state pending">Bağlantı bekliyor</span><span class="source-arrow">↗</span></a>
-              <a class="source-row" href="https://www.osym.gov.tr/SinavGrubu/Index/3" target="_blank" rel="noopener"><span class="source-icon violet">ÖS</span><span class="source-copy"><strong>ÖSYM</strong><small>KPSS ve tercih duyuruları</small></span><span class="source-state pending">Bağlantı bekliyor</span><span class="source-arrow">↗</span></a>
-              <a class="source-row" href="https://www.iskur.gov.tr/" target="_blank" rel="noopener"><span class="source-icon orange">İŞ</span><span class="source-copy"><strong>İŞKUR</strong><small>Kamu işçi alımları</small></span><span class="source-state pending">Bağlantı bekliyor</span><span class="source-arrow">↗</span></a>
-              <a class="source-row" href="https://www.iskur.gov.tr/ilanlar/kamu-memur-alim-ilanlari/?idId=istanbul&il=%C4%B0stanbul" target="_blank" rel="noopener"><span class="source-icon orange">KM</span><span class="source-copy"><strong>İŞKUR Kamu Memur Alımları (İstanbul)</strong><small>İstanbul belediye ve kamu memur ilanları</small></span><span class="source-state pending">İlk tarama bekleniyor</span><span class="source-arrow">↗</span></a>
-              <a class="source-row" href="https://www.ilan.gov.tr/" target="_blank" rel="noopener"><span class="source-icon green">İL</span><span class="source-copy"><strong>İlan.gov.tr</strong><small>Resmî ilanlar</small></span><span class="source-state pending">Bağlantı bekliyor</span><span class="source-arrow">↗</span></a>
-              <a class="source-row" href="https://www.resmigazete.gov.tr/" target="_blank" rel="noopener"><span class="source-icon red">RG</span><span class="source-copy"><strong>Resmî Gazete</strong><small>Personel alım duyuruları</small></span><span class="source-state pending">Bağlantı bekliyor</span><span class="source-arrow">↗</span></a>
-              <a class="source-row" href="https://kamuilan.sbb.gov.tr/" target="_blank" rel="noopener"><span class="source-icon blue">SB</span><span class="source-copy"><strong>Kamu İlanları (SBB)</strong><small>Merkezî kamu ilan duyuruları</small></span><span class="source-state pending">Bağlantı bekliyor</span><span class="source-arrow">↗</span></a>
-              <a class="source-row" href="https://www.sbb.gov.tr/tumu/" target="_blank" rel="noopener"><span class="source-icon blue">SB</span><span class="source-copy"><strong>SBB Kurum Duyuruları</strong><small>Strateji ve Bütçe Başkanlığının kendi personel duyuruları</small></span><span class="source-state pending">İlk tarama bekleniyor</span><span class="source-arrow">↗</span></a>
+              <a class="source-row" href="https://kariyerkapisi.gov.tr/" target="_blank" rel="noopener"><span aria-hidden="true" class="source-icon blue">KK</span><span class="source-copy"><strong>Kariyer Kapısı</strong><small>Kamu işe alım ilanları</small></span><span class="source-state pending">Durum kontrol ediliyor</span><span aria-hidden="true" class="source-arrow">↗</span></a>
+              <a class="source-row" href="https://www.osym.gov.tr/SinavGrubu/Index/3" target="_blank" rel="noopener"><span aria-hidden="true" class="source-icon violet">ÖS</span><span class="source-copy"><strong>ÖSYM</strong><small>KPSS ve tercih duyuruları</small></span><span class="source-state pending">Durum kontrol ediliyor</span><span aria-hidden="true" class="source-arrow">↗</span></a>
+              <a class="source-row" href="https://www.iskur.gov.tr/" target="_blank" rel="noopener"><span aria-hidden="true" class="source-icon orange">İŞ</span><span class="source-copy"><strong>İŞKUR</strong><small>Kamu işçi alımları</small></span><span class="source-state pending">Durum kontrol ediliyor</span><span aria-hidden="true" class="source-arrow">↗</span></a>
+              <a class="source-row" href="https://www.iskur.gov.tr/ilanlar/kamu-memur-alim-ilanlari/?idId=istanbul&il=%C4%B0stanbul" target="_blank" rel="noopener"><span aria-hidden="true" class="source-icon orange">KM</span><span class="source-copy"><strong>İŞKUR Kamu Memur Alımları (İstanbul)</strong><small>İstanbul belediye ve kamu memur ilanları</small></span><span class="source-state pending">Durum kontrol ediliyor</span><span aria-hidden="true" class="source-arrow">↗</span></a>
+              <a class="source-row" href="https://www.ilan.gov.tr/" target="_blank" rel="noopener"><span aria-hidden="true" class="source-icon green">İL</span><span class="source-copy"><strong>İlan.gov.tr</strong><small>Resmî ilanlar</small></span><span class="source-state pending">Durum kontrol ediliyor</span><span aria-hidden="true" class="source-arrow">↗</span></a>
+              <a class="source-row" href="https://www.resmigazete.gov.tr/" target="_blank" rel="noopener"><span aria-hidden="true" class="source-icon red">RG</span><span class="source-copy"><strong>Resmî Gazete</strong><small>Personel alım duyuruları</small></span><span class="source-state pending">Durum kontrol ediliyor</span><span aria-hidden="true" class="source-arrow">↗</span></a>
+              <a class="source-row" href="https://kamuilan.sbb.gov.tr/" target="_blank" rel="noopener"><span aria-hidden="true" class="source-icon blue">SB</span><span class="source-copy"><strong>Kamu İlanları (SBB)</strong><small>Merkezî kamu ilan duyuruları</small></span><span class="source-state pending">Durum kontrol ediliyor</span><span aria-hidden="true" class="source-arrow">↗</span></a>
+              <a class="source-row" href="https://www.sbb.gov.tr/tumu/" target="_blank" rel="noopener"><span aria-hidden="true" class="source-icon blue">SB</span><span class="source-copy"><strong>SBB Kurum Duyuruları</strong><small>Strateji ve Bütçe Başkanlığının kendi personel duyuruları</small></span><span class="source-state pending">Durum kontrol ediliyor</span><span aria-hidden="true" class="source-arrow">↗</span></a>
             </div>
-            <div class="source-footnote" id="sourceAutomationStatus"><span class="status-dot"></span><span>Otomatik kontrol etkin · Sunucu her 30 dakikada bir kaynakları kontrol eder.</span></div>
+            <div class="source-footnote" id="sourceAutomationStatus"><span class="status-dot"></span><span>Otomatik kontrol durumu sunucudan alınıyor…</span></div>
           </section>
         </div>
 
         <section class="section-block">
           <div class="section-head"><div><div class="panel-kicker">HIZLI ERİŞİM</div><h2>Aradığını kolayca bul</h2></div><button class="text-button" data-go="listings">Tüm ilanlar <span>→</span></button></div>
           <div class="quick-grid">
-            <button class="quick-card" data-filter-category="Memur"><span class="quick-icon indigo">▤</span><span><strong>Memur alımları</strong><small>İdari ve büro kadroları</small></span><span class="quick-arrow">↗</span></button>
-            <button class="quick-card" data-filter-category="Sözleşmeli"><span class="quick-icon teal">◫</span><span><strong>Sözleşmeli personel</strong><small>4/B ve diğer pozisyonlar</small></span><span class="quick-arrow">↗</span></button>
-            <button class="quick-card" data-filter-category="Belediye"><span class="quick-icon amber">⌂</span><span><strong>Belediye ilanları</strong><small>Memur ve zabıta alımları</small></span><span class="quick-arrow">↗</span></button>
-            <button class="quick-card" data-filter-category="KPSS"><span class="quick-icon rose">◎</span><span><strong>KPSS tercihleri</strong><small>Merkezî yerleştirme</small></span><span class="quick-arrow">↗</span></button>
+            <button class="quick-card" data-filter-category="Memur"><span aria-hidden="true" class="quick-icon indigo">▤</span><span><strong>Memur alımları</strong><small>İdari ve büro kadroları</small></span><span aria-hidden="true" class="quick-arrow">↗</span></button>
+            <button class="quick-card" data-filter-category="Sözleşmeli"><span aria-hidden="true" class="quick-icon teal">◫</span><span><strong>Sözleşmeli personel</strong><small>4/B ve diğer pozisyonlar</small></span><span aria-hidden="true" class="quick-arrow">↗</span></button>
+            <button class="quick-card" data-filter-category="Belediye"><span aria-hidden="true" class="quick-icon amber">⌂</span><span><strong>Belediye ilanları</strong><small>Memur ve zabıta alımları</small></span><span aria-hidden="true" class="quick-arrow">↗</span></button>
+            <button class="quick-card" data-filter-category="KPSS"><span aria-hidden="true" class="quick-icon rose">◎</span><span><strong>KPSS tercihleri</strong><small>Merkezî yerleştirme</small></span><span aria-hidden="true" class="quick-arrow">↗</span></button>
           </div>
         </section>
 
@@ -105,8 +110,8 @@
         </section>
 
         <section class="section-block latest-block">
-          <div class="section-head"><div><div class="panel-kicker">SON EKLENENLER</div><h2>Yeni ilanlar</h2></div><span class="empty-count">Canlı akış bekleniyor</span></div>
-          <div id="latestListings" class="listing-results"><div class="empty-state compact-empty"><span class="empty-icon">⌕</span><div><strong>Henüz doğrulanmış ilan yok</strong><p>Kaynaklardan ilan aktarıldığında en yeni kayıtlar burada görünecek.</p></div><button class="button button-outline" data-go="listings">İlan ekranını aç</button></div></div>
+          <div class="section-head"><div><div class="panel-kicker">SON EKLENENLER</div><h2>Yeni ilanlar</h2></div><span class="empty-count">Yükleniyor</span></div>
+          <div id="latestListings" class="listing-results"><div class="empty-state compact-empty"><span aria-hidden="true" class="empty-icon">⌕</span><div><strong>İlanlar yükleniyor</strong><p>Yüklenemezse nedeni burada gösterilir. Kaynakların son durumu için “Genel Bakış” ekranına bak.</p></div><button class="button button-outline" data-go="listings">İlan ekranını aç</button></div></div>
         </section>
       </section>
 
@@ -115,9 +120,9 @@
         <div class="filter-panel panel">
           <div class="filter-top"><div><div class="panel-kicker">ARAMA VE FİLTRELEME</div><h2>Arama kriterleri</h2></div><button class="text-button" id="clearFilters">Filtreleri temizle</button></div>
           <div class="filter-grid">
-            <label class="field search-field"><span>İlanın her alanında ara</span><div class="input-wrap"><span class="input-icon">⌕</span><input type="search" id="searchInput" placeholder="Örn. adalet, zabıta, bilgisayar işletmeni" autocomplete="off"></div></label>
-            <label class="field"><span>Bölüm / program</span><input type="search" id="departmentFilter" placeholder="Örn. Adalet" autocomplete="off"></label><label class="field"><span>Şehir</span><select id="cityFilter"><option value="">Tüm şehirler</option><option>İstanbul</option><option>Ankara</option><option>İzmir</option><option>Bursa</option><option>Antalya</option><option>Türkiye Geneli</option></select></label>
-            <label class="field"><span>Öğrenim düzeyi</span><select id="educationFilter"><option value="">Tümü</option><option>Ortaöğretim</option><option>Ön lisans</option><option>Lisans</option><option>Doktora</option></select></label>
+            <label class="field search-field"><span>İlanın her alanında ara</span><div class="input-wrap"><span aria-hidden="true" class="input-icon">⌕</span><input type="search" id="searchInput" placeholder="Örn. adalet, zabıta, bilgisayar işletmeni" autocomplete="off"></div></label>
+            <label class="field"><span>Bölüm / program</span><input type="search" id="departmentFilter" placeholder="Örn. Adalet" autocomplete="off"></label><label class="field"><span>Şehir</span><select id="cityFilter"><option value="">Tüm şehirler</option><option>Adana</option><option>Adıyaman</option><option>Afyonkarahisar</option><option>Ağrı</option><option>Aksaray</option><option>Amasya</option><option>Ankara</option><option>Antalya</option><option>Ardahan</option><option>Artvin</option><option>Aydın</option><option>Balıkesir</option><option>Bartın</option><option>Batman</option><option>Bayburt</option><option>Bilecik</option><option>Bingöl</option><option>Bitlis</option><option>Bolu</option><option>Burdur</option><option>Bursa</option><option>Çanakkale</option><option>Çankırı</option><option>Çorum</option><option>Denizli</option><option>Diyarbakır</option><option>Düzce</option><option>Edirne</option><option>Elazığ</option><option>Erzincan</option><option>Erzurum</option><option>Eskişehir</option><option>Gaziantep</option><option>Giresun</option><option>Gümüşhane</option><option>Hakkâri</option><option>Hatay</option><option>Iğdır</option><option>Isparta</option><option>İstanbul</option><option>İzmir</option><option>Kahramanmaraş</option><option>Karabük</option><option>Karaman</option><option>Kars</option><option>Kastamonu</option><option>Kayseri</option><option>Kırıkkale</option><option>Kırklareli</option><option>Kırşehir</option><option>Kilis</option><option>Kocaeli</option><option>Konya</option><option>Kütahya</option><option>Malatya</option><option>Manisa</option><option>Mardin</option><option>Mersin</option><option>Muğla</option><option>Muş</option><option>Nevşehir</option><option>Niğde</option><option>Ordu</option><option>Osmaniye</option><option>Rize</option><option>Sakarya</option><option>Samsun</option><option>Siirt</option><option>Sinop</option><option>Sivas</option><option>Şanlıurfa</option><option>Şırnak</option><option>Tekirdağ</option><option>Tokat</option><option>Trabzon</option><option>Tunceli</option><option>Uşak</option><option>Van</option><option>Yalova</option><option>Yozgat</option><option>Zonguldak</option><option>Türkiye Geneli</option></select></label>
+            <label class="field"><span>Öğrenim düzeyi</span><select id="educationFilter"><option value="">Tümü</option><option>Ortaöğretim</option><option>Ön lisans</option><option>Lisans</option><option>Yüksek lisans</option><option>Doktora</option></select></label>
             <label class="field"><span>KPSS puan türü</span><select id="scoreFilter"><option value="">Tümü</option><option>P93</option><option>P94</option><option>P3</option><option>KPSS şartı yok</option></select></label>
             <label class="field"><span>İlan türü</span><select id="typeFilter"><option value="">Tüm türler</option><option>Memur</option><option>Sözleşmeli</option><option>Belediye</option><option>İşçi</option><option>KPSS</option><option>Akademik Personel</option><option>Resmî Gazete</option><option>Kamu ilanı</option><option>Duyuru</option></select></label>
           </div>
@@ -125,7 +130,7 @@
             <label class="field source-filter-field"><span>İLAN KAYNAĞI FİLTRESİ</span><select id="sourceFilter" aria-label="İlan kaynağına göre filtrele"><option value="">Tüm kaynaklar</option></select></label>
             <p>Kaynak seçerek yalnızca o kurum veya platformdan gelen ilanları görüntüleyebilirsin.</p>
           </div>
-          <div class="filter-bottom"><span id="resultSummary">Canlı ilan kaynağı henüz bağlanmadı.</span><button class="button button-primary" id="applyFilters">Filtreleri uygula <span>→</span></button></div>
+          <div class="filter-bottom"><span id="resultSummary" role="status" aria-live="polite">İlanlar yükleniyor…</span><button class="button button-primary" id="applyFilters">Filtreleri uygula <span>→</span></button></div>
         </div>
         <div class="listing-toolbar"><div><strong>İlanlar</strong><span class="muted" id="listingCount">0 kayıt</span></div><label class="sort-control">Sıralama <select id="sortFilter"><option value="newest">En yeni</option><option value="deadline">Son başvuru tarihi</option><option value="institution">Kurum adına göre</option></select></label></div>
         <div id="listingResults" class="listing-results"></div>
@@ -140,7 +145,7 @@
         <div class="page-heading compact-heading"><div><div class="eyebrow">ADAY ARAÇLARI</div><h1 id="toolsTitle">İşini kolaylaştıran <em>araçlar.</em></h1><p class="page-subtitle">Başvuru sürecinde ihtiyaç duyabileceğin pratik hesaplamalar ve yardımcılar.</p></div></div>
         <div class="tools-grid">
           <section class="panel tool-card">
-            <div class="tool-head"><span class="tool-icon indigo">◷</span><span class="tool-tag">HESAPLAMA</span></div>
+            <div class="tool-head"><span aria-hidden="true" class="tool-icon indigo">◷</span><span class="tool-tag">HESAPLAMA</span></div>
             <h2>Yaş hesaplayıcı</h2><p>İlan şartındaki yaş sınırını doğum tarihine göre kontrol et.</p>
             <label class="field"><span>Doğum tarihi</span><input type="date" id="birthDate"></label>
             <label class="field"><span>İstenen en fazla yaş</span><input type="number" id="maxAge" min="1" max="100" placeholder="Örn. 35"></label>
@@ -148,7 +153,7 @@
             <div class="tool-result" id="ageResult" aria-live="polite">Sonuç burada gösterilecek.</div>
           </section>
           <section class="panel tool-card">
-            <div class="tool-head"><span class="tool-icon teal">◉</span><span class="tool-tag">KPSS</span></div>
+            <div class="tool-head"><span aria-hidden="true" class="tool-icon teal">◉</span><span class="tool-tag">KPSS</span></div>
             <h2>Puan şartı kontrolü</h2><p>Mevcut puanını ilandaki asgari puanla karşılaştır. Bu araç puan üretmez.</p>
             <label class="field"><span>KPSS puan türü</span><select id="toolScoreType"><option>P93</option><option>P94</option><option>P3</option></select></label>
             <div class="two-fields"><label class="field"><span>Senin puanın</span><input type="number" id="myScore" min="0" max="100" step="0.00001" placeholder="Örn. 72.50"></label><label class="field"><span>İstenen en az puan</span><input type="number" id="requiredScore" min="0" max="100" step="0.01" placeholder="Örn. 70"></label></div>
@@ -156,18 +161,19 @@
             <div class="tool-result" id="scoreResult" aria-live="polite">Sonuç burada gösterilecek.</div>
           </section>
           <section class="panel tool-card">
-            <div class="tool-head"><span class="tool-icon amber">▦</span><span class="tool-tag">TAKVİM</span></div>
+            <div class="tool-head"><span aria-hidden="true" class="tool-icon amber">▦</span><span class="tool-tag">TAKVİM</span></div>
             <h2>Son başvuru sayacı</h2><p>İlanın son başvuru tarihine kaç gün kaldığını hesapla.</p>
             <label class="field"><span>Son başvuru tarihi</span><input type="date" id="deadlineDate"></label>
             <button class="button button-primary full-button" id="calculateDeadline">Kalan süreyi hesapla</button>
             <div class="tool-result" id="deadlineResult" aria-live="polite">Sonuç burada gösterilecek.</div>
           </section>
           <section class="panel tool-card profile-tool">
-            <div class="tool-head"><span class="tool-icon rose">◎</span><span class="tool-tag">ADAY PROFİLİ</span></div>
+            <div class="tool-head"><span aria-hidden="true" class="tool-icon rose">◎</span><span class="tool-tag">ADAY PROFİLİ</span></div>
             <h2>Tercihlerini kaydet</h2><p>İlan eşleştirmesi için öğrenim, bölüm, KPSS puanı ve şehir tercihini bu cihazda sakla.</p>
-            <label class="field"><span>Öğrenim düzeyi</span><select id="profileEducation"><option value="">Seçiniz</option><option>Ortaöğretim</option><option>Ön lisans</option><option>Lisans</option><option>Doktora</option></select></label>
-            <label class="field"><span>Mezun olunan bölüm / program</span><input type="text" id="profileDepartment" placeholder="Örn. Adalet"></label>\n            <label class="field"><span>KPSS puan türü</span><select id="profileScore"><option value="">Seçiniz</option><option>P93</option><option>P94</option><option>P3</option></select></label>
-            <label class="field"><span>KPSS puanın (isteğe bağlı)</span><input type="number" id="profileScoreValue" min="0" max="100" step="0.00001" placeholder="Örn. 72,50"></label>
+            <label class="field"><span>Öğrenim düzeyi</span><select id="profileEducation"><option value="">Seçiniz</option><option>Ortaöğretim</option><option>Ön lisans</option><option>Lisans</option><option>Yüksek lisans</option><option>Doktora</option></select></label>
+            <label class="field"><span>Mezun olunan bölüm / program</span><input type="text" id="profileDepartment" placeholder="Örn. Adalet"></label>
+            <label class="field"><span>KPSS puan türü</span><select id="profileScore"><option value="">Seçiniz</option><option>P93</option><option>P94</option><option>P3</option></select></label>
+            <label class="field"><span>KPSS puanın (isteğe bağlı)</span><input type="number" id="profileScoreValue" min="0" max="100" step="0.00001" placeholder="Örn. 72.50"></label>
             <label class="field"><span>Öncelikli şehir</span><input type="text" id="profileCity" placeholder="Örn. İstanbul"></label>
             <button class="button button-primary full-button" id="saveProfile">Tercihleri kaydet</button>
             <div class="tool-result" id="profileResult" aria-live="polite">Bilgiler yalnızca bu tarayıcıda saklanır.</div>
@@ -181,14 +187,14 @@
   </div>
 
   <div class="mobile-nav" aria-label="Mobil menü">
-    <button class="mobile-nav-link active" data-view="overview"><span>▦</span><small>Özet</small></button>
-    <button class="mobile-nav-link" data-view="listings"><span>▤</span><small>İlanlar</small></button>
-    <button class="mobile-nav-link" data-view="saved"><span>☆</span><small>Takip</small></button>
-    <button class="mobile-nav-link" data-view="tools"><span>⌘</span><small>Araçlar</small></button>
+    <button class="mobile-nav-link active" data-view="overview"><span aria-hidden="true">▦</span><small>Özet</small></button>
+    <button class="mobile-nav-link" data-view="listings"><span aria-hidden="true">▤</span><small>İlanlar</small></button>
+    <button class="mobile-nav-link" data-view="saved"><span aria-hidden="true">☆</span><small>Takip</small></button>
+    <button class="mobile-nav-link" data-view="tools"><span aria-hidden="true">⌘</span><small>Araçlar</small></button>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="config.js"></script>
+  <script src="config.js" onerror="document.addEventListener('DOMContentLoaded',function(){var t=document.getElementById('toast');if(t){t.textContent='Ayar dosyası (config.js) yüklenemedi; ilanlar alınamayacak.';t.classList.add('show');}})"></script>
   <script src="app.js" defer></script>
 </body>
 </html>
