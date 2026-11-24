@@ -1,5 +1,6 @@
 import json, os, re, sys, time, io
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from urllib.parse import urljoin, urlparse
 import requests
 from requests.adapters import HTTPAdapter
@@ -27,13 +28,20 @@ def decode(r):
             if x.count("\ufffd")<2: return x
         except (UnicodeDecodeError,LookupError): pass
     return r.content.decode("windows-1254",errors="replace")
+def local_today():
+    return datetime.now(ZoneInfo("Europe/Istanbul")).date().isoformat()
+
 def date(v):
     v=tx(v)
     iso=re.match(r"^(\d{4}-\d{2}-\d{2})",v)
-    if iso: return iso.group(1)
+    if iso:
+        try: return datetime.strptime(iso.group(1),"%Y-%m-%d").date().isoformat()
+        except ValueError: return None
     m=re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})",v)
     if m:
-        d,mo,y=m.groups(); return f"{y}-{int(mo):02d}-{int(d):02d}"
+        d,mo,y=m.groups()
+        try: return datetime(int(y),int(mo),int(d)).date().isoformat()
+        except ValueError: return None
     return None
 def item(sid,eid,title,inst,url,summary="",**kw):
     return {"externalId":str(eid),"title":tx(title)[:500],"institution":tx(inst)[:500] or sid,
@@ -56,7 +64,7 @@ def sbb_html(html):
 def kariyer_rows(payload):
     rows=payload.get("searchIlan") if isinstance(payload,dict) else None
     if not isinstance(rows,list): return []
-    out=[]; today=datetime.now(timezone.utc).date().isoformat()
+    out=[]; today=local_today()
     for r in rows:
         gid=r.get("guid"); title=r.get("ilanBaslik") or r.get("ilanAdi") or r.get("baslik")
         if not gid or not title: continue
@@ -153,7 +161,7 @@ def parse_resmi(html,date_key,page_url):
             publishedAt=f"{date_key[:4]}-{date_key[4:6]}-{date_key[6:8]}",
             startDate=start_date,endDate=end_date,
             positionCount=int(count_match.group(1)) if count_match else None,
-            status="open" if end_date and end_date>=datetime.now(timezone.utc).date().isoformat() else "check_required"))
+            status="open" if end_date and end_date>=local_today() else "check_required"))
     return out[:100]
 
 def decode_resmi(response):
