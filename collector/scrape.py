@@ -402,6 +402,44 @@ def scrape_iskur(browser):
     finally:
         p.close()
 
+def scrape_iskur_memur(browser):
+    url="https://www.iskur.gov.tr/ilanlar/kamu-memur-alim-ilanlari/?idId=istanbul&il=%C4%B0stanbul"
+    p=browser.new_page()
+    try:
+        response=p.goto(url,wait_until="domcontentloaded",timeout=25000)
+        if response and response.status>=400:
+            raise RuntimeError(f"İŞKUR Kamu Memur Alım sayfası HTTP {response.status}")
+        p.wait_for_timeout(700)
+        soup=BeautifulSoup(p.content(),"html.parser")
+        out=[]; seen=set()
+        for row in soup.select("tr"):
+            cells=row.find_all(["td","th"])
+            if len(cells)<2: continue
+            row_text=tx(row.get_text(" ",strip=True))
+            title_cell=cells[1] if len(cells)>1 else row
+            title=tx(title_cell.get_text(" ",strip=True))
+            if not title or not RE.search(title) or BAD.search(title): continue
+            link=row.find("a",href=True)
+            detail=urljoin("https://www.iskur.gov.tr/",link["href"]) if link else url
+            date_text=tx(cells[0].get_text(" ",strip=True))
+            date_match=re.search(r"(\d{1,2})[./](\d{1,2})[./](\d{4})(?:\s+(\d{1,2}):(\d{2}))?",date_text)
+            end_date=None
+            if date_match:
+                end_date=f"{date_match.group(3)}-{date_match.group(2).zfill(2)}-{date_match.group(1).zfill(2)}"
+            eid=detail if detail!=url else re.sub(r"\W+","-",title.lower())+"-"+(end_date or "current")
+            if eid in seen: continue
+            seen.add(eid)
+            out.append(item("iskur-kamu-memur",eid,title,"İŞKUR Kamu Memur Alım İlanları",detail,
+                row_text,category="Memur",city="İstanbul",endDate=end_date))
+        if not out:
+            body=tx(soup.get_text(" ",strip=True))
+            if "İstanbul iline ait İlanlar" not in body and "Kamu Memur Alım İlanları" not in body:
+                raise RuntimeError("İŞKUR kamu memur ilan sayfası beklenen içerikle açılmadı.")
+            print("İŞKUR Kamu Memur: sayfa erişilebilir, uygun ilan bulunamadı.")
+        return out[:100]
+    finally:
+        p.close()
+
 def scrape_sbb(browser):
     p=browser.new_page()
     try:
@@ -414,8 +452,8 @@ def scrape_sbb(browser):
         return sbb_html(p.content())
     finally: p.close()
 
-SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":scrape_ilan,"kamuilan-sbb":scrape_sbb,"iskur":scrape_iskur}
-SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"iskur":240}
+SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":scrape_ilan,"kamuilan-sbb":scrape_sbb,"iskur":scrape_iskur,"iskur-kamu-memur":scrape_iskur_memur}
+SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"iskur":240,"iskur-kamu-memur":30}
 def report(sid,items=None,error=None):
     if not TOKEN: raise RuntimeError("MEMURPRO_INGEST_TOKEN secret is missing")
     r=requests.post(API+"/api/ingest",headers={"x-admin-token":TOKEN},json={"sourceId":sid,"items":items or [],"error":error},timeout=30); r.raise_for_status(); return r.json()
