@@ -682,6 +682,24 @@ async function loadLiveData() {
 
 function renderSourceStatuses(sources) {
   state.sources = Array.isArray(sources) ? sources : [];
+  const presentation = {
+    'kariyer-kapisi': ['KK','blue','Kamu işe alım ilanları'],
+    'osym': ['ÖS','violet','KPSS ve tercih duyuruları'],
+    'iskur': ['İŞ','orange','Kamu işçi alımları'],
+    'iskur-kamu-memur': ['KM','orange','İstanbul belediye ve kamu memur ilanları'],
+    'ilan-gov': ['İL','green','Resmî ilanlar'],
+    'resmi-gazete': ['RG','red','Personel alım duyuruları'],
+    'kamuilan-sbb': ['SB','blue','Merkezî kamu ilan duyuruları'],
+    'sbb-kurum-duyurulari': ['SB','blue','Strateji ve Bütçe Başkanlığının kendi personel duyuruları']
+  };
+  const sourceList = $('#sourceList');
+  if (sourceList) {
+    sourceList.innerHTML = state.sources.map(source => {
+      const [abbr,tone,description] = presentation[source.id] || [String(source.name || 'K').slice(0,2).toLocaleUpperCase('tr-TR'),'blue','Resmî kaynak'];
+      const href = safeListingUrl(source.homepageUrl) || '#';
+      return `<a class="source-row" data-source-id="${escapeHTML(source.id)}" href="${escapeHTML(href)}" target="_blank" rel="noopener"><span aria-hidden="true" class="source-icon ${tone}">${escapeHTML(abbr)}</span><span class="source-copy"><strong>${escapeHTML(source.name || 'Kaynak')}</strong><small>${escapeHTML(description)}</small></span><span class="source-state pending">Kontrol ediliyor</span><span aria-hidden="true" class="source-arrow">↗</span></a>`;
+    }).join('');
+  }
   updateSourceFilter();
   const countBadge = $('.source-total');
   if (countBadge) countBadge.textContent = `${sources.length} kaynak`;
