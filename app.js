@@ -188,18 +188,32 @@ function updateSourceFilter() {
   }
 }
 
+function normalizeSearchText(value) {
+  return String(value ?? '').toLocaleLowerCase('tr-TR').replace(/[\\u0300-\\u036f]/g, '').replace(/\\s+/g, ' ').trim();
+}
+
+function listingSearchText(item) {
+  const excluded = new Set(['id', 'externalId', 'detailUrl', 'url']);
+  return Object.entries(item || {})
+    .filter(([key, value]) => !excluded.has(key) && value !== null && value !== undefined)
+    .map(([, value]) => Array.isArray(value) ? value.join(' ') : typeof value === 'object' ? JSON.stringify(value) : String(value))
+    .join(' ');
+}
+
 function applyFilters(listings) {
   const f = state.filters;
   return listings.filter(item => {
-    const haystack = `${item.title || ''} ${item.institution || ''} ${item.summary || ''}`.toLocaleLowerCase('tr-TR');
-    if (f.q && !haystack.includes(f.q.toLocaleLowerCase('tr-TR'))) return false;
-    if (f.city && item.city !== f.city && item.city !== 'Türkiye Geneli') return false;
-    if (f.education && item.education !== f.education) return false;
-    if (f.score && item.scoreType !== f.score) return false;
-    if (f.type && item.category !== f.type) return false;
+    const allText = normalizeSearchText(listingSearchText(item));
+    const qualificationText = normalizeSearchText([item.education, item.summary, item.title].filter(Boolean).join(' '));
+    if (f.q && !allText.includes(normalizeSearchText(f.q))) return false;
+    if (f.department && !qualificationText.includes(normalizeSearchText(f.department))) return false;
+    if (f.city && normalizeSearchText(item.city) !== normalizeSearchText(f.city) && item.city !== 'Türkiye Geneli') return false;
+    if (f.education && !qualificationText.includes(normalizeSearchText(f.education))) return false;
+    if (f.score && !normalizeSearchText([item.scoreType, item.summary].join(' ')).includes(normalizeSearchText(f.score))) return false;
+    if (f.type && normalizeSearchText(item.category) !== normalizeSearchText(f.type)) return false;
     if (f.source) {
-      const itemSources = String(item.sourceName || '').split(' · ').map(name => name.trim().toLocaleLowerCase('tr-TR'));
-      if (!itemSources.includes(f.source.toLocaleLowerCase('tr-TR'))) return false;
+      const itemSources = String(item.sourceName || '').split(' · ').map(name => normalizeSearchText(name));
+      if (!itemSources.includes(normalizeSearchText(f.source))) return false;
     }
     return true;
   });
@@ -229,7 +243,7 @@ function renderListings() {
 
 function hasCandidateProfile() {
   const p = state.profile;
-  return Boolean(p && (p.education || p.scoreType || p.city || (p.score !== null && p.score !== undefined && p.score !== '')));
+  return Boolean(p && (p.education || p.department || p.scoreType || p.city || (p.score !== null && p.score !== undefined && p.score !== '')));
 }
 
 function normalizeEducation(value) {
@@ -251,7 +265,7 @@ function assessListing(listing) {
   const markPass = (message) => checks.push(message);
   const markFail = (message) => { failed = true; checks.push(message); };
 
-  if (p.education) {
+  if (p.department) {\n    const requirementText = normalizeSearchText([listing.education, listing.summary, listing.title].filter(Boolean).join(' '));\n    if (!requirementText) markUnknown('İlanın bölüm şartı kaynak verisinde yok.');\n    else if (requirementText.includes(normalizeSearchText(p.department))) markPass(`${p.department} bölüm/program adı ilanda geçiyor.`);\n    else markFail(`İlan metninde ${p.department} bölüm/programı bulunamadı; resmî şartları kontrol et.`);\n  }\n  if (p.education) {
     if (!listing.education) markUnknown('İlanın öğrenim şartı kaynak verisinde yok.');
     else if (normalizeEducation(p.education) === normalizeEducation(listing.education)) markPass('Öğrenim düzeyi eşleşiyor.');
     else markFail(`Öğrenim şartı farklı: ${listing.education}.`);
@@ -559,6 +573,7 @@ function renderSourceStatuses(sources) {
 function bindFilters() {
   state.filters = {
     q: $('#searchInput').value.trim(),
+    department: $('#departmentFilter')?.value.trim() || '',
     city: $('#cityFilter').value,
     education: $('#educationFilter').value,
     score: $('#scoreFilter').value,
@@ -625,6 +640,7 @@ function setToolResult(element, message, kind = '') {
 function saveProfile() {
   const profile = {
     education: $('#profileEducation').value,
+    department: $('#profileDepartment')?.value.trim() || '',
     scoreType: $('#profileScore').value,
     score: $('#profileScoreValue').value === '' ? null : Number($('#profileScoreValue').value),
     city: $('#profileCity').value.trim(),
@@ -642,7 +658,7 @@ function saveProfile() {
 
 function populateProfile() {
   if (!state.profile) return;
-  $('#profileEducation').value = state.profile.education || '';
+  $('#profileEducation').value = state.profile.education || '';\n  if ($('#profileDepartment')) $('#profileDepartment').value = state.profile.department || '';
   $('#profileScore').value = state.profile.scoreType || '';
   $('#profileScoreValue').value = state.profile.score ?? '';
   $('#profileCity').value = state.profile.city || '';
@@ -719,11 +735,13 @@ function bindEvents() {
     bindFilters();
   }));
   $('#applyFilters').addEventListener('click', bindFilters);
+  $('#searchInput').addEventListener('input', bindFilters);
+  $('#departmentFilter')?.addEventListener('input', bindFilters);
   $('#searchInput').addEventListener('keydown', event => { if (event.key === 'Enter') bindFilters(); });
   $('#sortFilter').addEventListener('change', renderListings);
   $('#sourceFilter')?.addEventListener('change', bindFilters);
   $('#clearFilters').addEventListener('click', () => {
-    ['searchInput','cityFilter','educationFilter','scoreFilter','typeFilter','sourceFilter'].forEach(id => { $(`#${id}`).value = ''; });
+    ['searchInput','departmentFilter','cityFilter','educationFilter','scoreFilter','typeFilter','sourceFilter'].forEach(id => { $(`#${id}`).value = ''; });
     bindFilters();
   });
   document.addEventListener('change', event => {
