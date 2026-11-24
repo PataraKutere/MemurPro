@@ -346,8 +346,10 @@ function renderLatestListings() {
   const count = $('.latest-block .empty-count');
   if (!container) return;
   if (!state.listings.length) {
-    if (count) count.textContent = 'Canlı akış bekleniyor';
-    container.innerHTML = `<div class="empty-state compact-empty"><span class="empty-icon">⌕</span><div><strong>Henüz doğrulanmış ilan yok</strong><p>Kaynaklardan ilan aktarıldığında en yeni kayıtlar burada görünecek.</p></div><button class="button button-outline" data-go="listings">İlan ekranını aç</button></div>`;
+    if (count) count.textContent = state.apiStatus === 'error' ? 'Bağlantı hatası' : state.apiStatus === 'loading' ? 'Yükleniyor' : 'İlan bekleniyor';
+    const title = state.apiStatus === 'error' ? 'İlanlar alınamadı' : state.apiStatus === 'loading' ? 'İlanlar yükleniyor' : 'Henüz doğrulanmış ilan yok';
+    const message = state.apiStatus === 'error' ? escapeHTML(state.apiError || 'API bağlantısı kurulamadı.') : state.apiStatus === 'loading' ? 'Resmî kaynaklardan kayıtlar getiriliyor.' : 'Kaynaklardan ilan aktarıldığında en yeni kayıtlar burada görünecek.';
+    container.innerHTML = `<div class="empty-state compact-empty"><span class="empty-icon">⌕</span><div><strong>${title}</strong><p>${message}</p></div><button class="button button-outline" data-go="listings">İlan ekranını aç</button></div>`;
     return;
   }
   const latest = [...state.listings].sort((a, b) => {
@@ -705,12 +707,15 @@ function renderSourceStatuses(sources) {
     const stateEl = $('.source-state', row);
     if (!stateEl) return;
     const errorText = String(source.lastError || '');
-    const zeroItems = source.status === 'connected' && Number(source.latestItemCount) === 0;
+    const hasCount = source.latestItemCount !== null && source.latestItemCount !== undefined;
+    const zeroItems = source.status === 'connected' && hasCount && Number(source.latestItemCount) === 0;
+    const accessError = /HTTP 403|403/.test(errorText) ? 'Erişim engeli · HTTP 403' : /HTTP 406|406/.test(errorText) ? 'Erişim engeli · HTTP 406' : '';
+    const parseError = /parse|ayrıştır|beklenen|JSON|liste biçimi|metin boş/i.test(errorText);
     const labels = {
-      connected: zeroItems ? 'Başarılı · 0 ilan' : `Başarılı · ${Number(source.latestItemCount || 0)} ilan`,
-      degraded: /HTTP 403|403/.test(errorText) ? 'Erişim engeli · HTTP 403' : /HTTP 406|406/.test(errorText) ? 'Erişim engeli · HTTP 406' : 'Site açık · veri akışı hatalı',
+      connected: hasCount ? (zeroItems ? 'Başarılı · 0 ilan' : `Başarılı · ${Number(source.latestItemCount)} ilan`) : 'Bağlı · ilan sayısı ölçülmedi',
+      degraded: accessError || (parseError ? 'Ayrıştırma hatası' : 'Site açık · veri akışı hatalı'),
       pending: 'Kontrol bekleniyor',
-      failed: /HTTP 403|403/.test(errorText) ? 'Erişim engeli · HTTP 403' : /HTTP 406|406/.test(errorText) ? 'Erişim engeli · HTTP 406' : 'Kaynağa erişilemiyor'
+      failed: accessError || (parseError ? 'Ayrıştırma hatası' : 'Kaynağa erişilemiyor')
     };
     stateEl.textContent = labels[source.status] || 'Durum bilinmiyor';
     stateEl.className = `source-state ${source.status || 'pending'}`;
