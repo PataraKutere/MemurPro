@@ -644,6 +644,32 @@ async function fetchFeed(source) {
   }
 }
 
+async function probeSourceHomepage(source) {
+  if (!source.homepage_url) return { reachable: false, reason: 'Ana sayfa adresi tanımlı değil.' };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000);
+  try {
+    const response = await fetch(source.homepage_url, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; MemurPro/0.1; public-source-health-check)',
+        'accept': 'text/html,application/xhtml+xml'
+      },
+      redirect: 'follow'
+    });
+    try { await response.body?.cancel(); } catch {}
+    return {
+      reachable: response.ok,
+      reason: response.ok ? 'Ana sayfa erişilebilir.' : 'Ana sayfa HTTP ' + response.status + ' döndürdü.'
+    };
+  } catch (error) {
+    return { reachable: false, reason: 'Ana sayfa kontrolü: ' + safeText(error?.message || error, 180) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function syncOneSource(source, env) {
   const checkedAt = new Date().toISOString();
   try {
@@ -688,9 +714,14 @@ async function syncOneSource(source, env) {
     return { source: source.name, status: 'connected', imported };
   } catch (error) {
     const message = safeText(error?.message || 'Bilinmeyen kaynak hatası', 500);
-    await env.DB.prepare(`UPDATE sources SET status='failed', last_checked_at=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-      .bind(checkedAt, message, source.id).run();
-    return { source: source.name, status: 'failed', imported: 0, message };
+    const homepage = await probeSourceHomepage(source);
+    const status = homepage.reachable ? 'degraded' : 'failed';
+    const detail = homepage.reachable
+      ? message + ' Ana site erişilebilir; ilan veri akışı çalışmıyor.'
+      : message + ' ' + homepage.reason;
+    await env.DB.prepare(`UPDATE sources SET status=?, last_checked_at=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .bind(status, checkedAt, safeText(detail, 500), source.id).run();
+    return { source: source.name, status, imported: 0, message: detail };
   }
 }
 
