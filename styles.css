@@ -191,3 +191,29 @@ body{background:#0d1523;color:#e4eaf4}
 .detail-warning{margin:14px 0 0;color:#899ab1;font-size:9px;line-height:1.6}
 .listing-actions .official-link{background:#263650;color:#c7d4e8}
 @media(max-width:620px){.listing-detail-dialog{width:calc(100vw - 16px);max-height:90vh;border-radius:13px}.detail-dialog-head{padding:15px}.detail-dialog-content{padding:15px}.detail-facts{grid-template-columns:1fr}.listing-actions{flex-wrap:wrap}}
+
+
+/* Per-listing application steps and document checklist */
+.application-checklist{grid-column:1/-1;margin-top:4px;padding:15px;border:1px solid #2c3d54;border-radius:11px;background:#111c2b}
+.checklist-heading,.documents-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.checklist-heading strong,.documents-heading strong{display:block;color:#e2eaf5;font-size:11px}
+.checklist-heading small,.documents-heading small{display:block;margin-top:4px;color:#8799b1;font-size:9px;line-height:1.5}
+.checklist-heading>b{color:#91d5bf;font-size:12px}
+.checklist-progress{height:5px;margin:11px 0 12px;overflow:hidden;border-radius:9px;background:#29394e}
+.checklist-progress span{display:block;height:100%;border-radius:9px;background:#55b99b;transition:width .2s ease}
+.checklist-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;padding-bottom:14px;border-bottom:1px solid #29394e}
+.checklist-row{display:flex;align-items:flex-start;gap:9px;min-width:0;color:#c3cfdf;font-size:10px;line-height:1.45;cursor:pointer}
+.checklist-row input{width:15px;height:15px;flex:0 0 15px;margin:1px 0 0;accent-color:#59bd9d}
+.checklist-row input:checked+span{color:#8195aa;text-decoration:line-through}
+.documents-heading{align-items:flex-start;flex-direction:column;gap:2px;margin:14px 0 10px}
+.documents-heading small{margin:0}
+.document-list{display:grid;gap:8px}
+.document-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #29394e;border-radius:8px;background:#172438}
+.document-row .checklist-row span{display:grid;gap:3px}
+.document-row .checklist-row strong{font-size:10px;font-weight:600}
+.document-row .checklist-row small{font-size:8px;color:#8395ad}
+.remove-doc{width:25px;height:25px;border:1px solid #46536a;border-radius:6px;background:#202f45;color:#e4a19b;font-size:17px;cursor:pointer}
+.add-document-row{display:flex;gap:8px;margin-top:10px}
+.add-document-row input{min-width:0;flex:1;height:34px;padding:0 10px;border:1px solid #3a4a60;border-radius:8px;background:#172438;color:#e4eaf4;font:500 10px 'DM Sans',sans-serif}
+.add-document-row button{padding:0 12px;border:1px solid #465b7b;border-radius:8px;background:#263a56;color:#dce7f6;font-size:10px;font-weight:700;cursor:pointer}
+@media(max-width:620px){.application-checklist{padding:12px}.checklist-steps{grid-template-columns:1fr}.add-document-row{align-items:stretch}.add-document-row button{padding:0 10px}}
