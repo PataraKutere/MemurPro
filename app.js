@@ -270,6 +270,34 @@ function showProfileTool() {
   showToast('Aday tercihlerini Araçlar bölümünden düzenleyebilirsin.');
 }
 
+async function refreshSources() {
+  const button = $('#refreshSources');
+  const apiBase = String(window.MEMURPRO_API_BASE || '').replace(/\/$/, '');
+  if (!apiBase) return showToast('Kaynak kontrol API adresi ayarlanmamış.');
+  if (button?.disabled) return;
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Kontrol başlatılıyor…';
+  }
+
+  try {
+    const response = await fetch(`${apiBase}/api/sync-now`, { method: 'POST', headers: { Accept: 'application/json' } });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `API ${response.status}`);
+    showToast('Kaynak kontrolü başlatıldı. Sonuçlar birazdan güncellenecek.');
+    await new Promise(resolve => window.setTimeout(resolve, 5000));
+    await loadLiveData();
+  } catch (error) {
+    showToast(`Kaynak kontrolü başlatılamadı: ${error.message}`);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Şimdi kontrol et ↻';
+    }
+  }
+}
+
 function bindEvents() {
   $$('.nav-link, .mobile-nav-link').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
   $$('[data-go]').forEach(button => button.addEventListener('click', () => setView(button.dataset.go)));
@@ -300,6 +328,7 @@ function bindEvents() {
   $('#calculateDeadline').addEventListener('click', calculateDeadline);
   $('#saveProfile').addEventListener('click', saveProfile);
   $('#profileButton').addEventListener('click', showProfileTool);
+  $('#refreshSources')?.addEventListener('click', refreshSources);
 }
 
 function init() {
