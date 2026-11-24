@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 API=os.environ["MEMURPRO_API_BASE"].rstrip("/")
-TOKEN=os.environ["MEMURPRO_INGEST_TOKEN"]
+TOKEN=os.environ.get("MEMURPRO_INGEST_TOKEN","")
 S=requests.Session()
 S.headers.update({"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36","Accept-Language":"tr-TR,tr;q=0.9"})
 RE=re.compile(r"personel\s+al[ıi]m|memur\s+al[ıi]m|sözleşmeli\s+personel|işçi\s+al[ıi]m|öğretim\s+(?:üyesi|elemanı|görevlisi)\s+al[ıi]m|uzman\s+yardımcısı|müfettiş\s+yardımcısı|zabıta\s+memuru|itfaiye\s+eri",re.I)
@@ -170,10 +170,11 @@ def scrape_sbb(browser):
 
 SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":lambda b:scrape_ilan(),"kamuilan-sbb":scrape_sbb,"iskur":scrape_iskur}
 def report(sid,items=None,error=None):
+    if not TOKEN: raise RuntimeError("MEMURPRO_INGEST_TOKEN secret is missing")
     r=requests.post(API+"/api/ingest",headers={"x-admin-token":TOKEN},json={"sourceId":sid,"items":items or [],"error":error},timeout=30); r.raise_for_status(); return r.json()
 def main():
     r=S.get(API+"/api/sources",timeout=20); r.raise_for_status(); sources={x["id"]:x for x in r.json().get("sources",[])}
-    now=datetime.now(timezone.utc); results=[]
+    now=datetime.now(timezone.utc); results=[]; dry=os.environ.get("COLLECTOR_DRY_RUN")=="1"
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=True)
         try:
@@ -187,6 +188,10 @@ def main():
                     except ValueError: pass
                 try:
                     items=[x for x in scraper(browser) if keep(x)]
+                    if dry:
+                        results.append({"source":sid,"count":len(items),"dryRun":True})
+                        print(f"DRY RUN {sid}: {len(items)} kayıt")
+                        continue
                     result=report(sid,items); results.append({"source":sid,**result})
                     print(f"OK {sid}: {result.get('imported',0)}")
                 except Exception as e:
