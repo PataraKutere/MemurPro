@@ -189,7 +189,7 @@ function updateSourceFilter() {
 }
 
 function normalizeSearchText(value) {
-  return String(value ?? '').toLocaleLowerCase('tr-TR').replace(/[\\u0300-\\u036f]/g, '').replace(/\\s+/g, ' ').trim();
+  return String(value ?? '').toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').trim();
 }
 
 function listingSearchText(item) {
@@ -265,7 +265,13 @@ function assessListing(listing) {
   const markPass = (message) => checks.push(message);
   const markFail = (message) => { failed = true; checks.push(message); };
 
-  if (p.department) {\n    const requirementText = normalizeSearchText([listing.education, listing.summary, listing.title].filter(Boolean).join(' '));\n    if (!requirementText) markUnknown('İlanın bölüm şartı kaynak verisinde yok.');\n    else if (requirementText.includes(normalizeSearchText(p.department))) markPass(`${p.department} bölüm/program adı ilanda geçiyor.`);\n    else markFail(`İlan metninde ${p.department} bölüm/programı bulunamadı; resmî şartları kontrol et.`);\n  }\n  if (p.education) {
+  if (p.department) {
+    const requirementText = normalizeSearchText([listing.education, listing.summary, listing.title].filter(Boolean).join(' '));
+    if (!requirementText) markUnknown('İlanın bölüm şartı kaynak verisinde yok.');
+    else if (requirementText.includes(normalizeSearchText(p.department))) markPass(`${p.department} bölüm/program adı ilanda geçiyor.`);
+    else markFail(`İlan metninde ${p.department} bölüm/programı bulunamadı; resmî şartları kontrol et.`);
+  }
+  if (p.education) {
     if (!listing.education) markUnknown('İlanın öğrenim şartı kaynak verisinde yok.');
     else if (normalizeEducation(p.education) === normalizeEducation(listing.education)) markPass('Öğrenim düzeyi eşleşiyor.');
     else markFail(`Öğrenim şartı farklı: ${listing.education}.`);
@@ -658,7 +664,8 @@ function saveProfile() {
 
 function populateProfile() {
   if (!state.profile) return;
-  $('#profileEducation').value = state.profile.education || '';\n  if ($('#profileDepartment')) $('#profileDepartment').value = state.profile.department || '';
+  $('#profileEducation').value = state.profile.education || '';
+  if ($('#profileDepartment')) $('#profileDepartment').value = state.profile.department || '';
   $('#profileScore').value = state.profile.scoreType || '';
   $('#profileScoreValue').value = state.profile.score ?? '';
   $('#profileCity').value = state.profile.city || '';
