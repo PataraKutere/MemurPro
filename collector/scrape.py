@@ -107,6 +107,46 @@ def scrape_kariyer(browser):
         raise RuntimeError(f"İki resmî Kariyer API adresi yanıt vermedi: {last_error}")
     finally: p.close()
 
+def parse_resmi(html,date_key,page_url):
+    soup=BeautifulSoup(html,"html.parser")
+    lines=[tx(x) for x in soup.get_text("\n").splitlines()]
+    lines=[x for x in lines if x]
+    heading_re=re.compile(r"^(.{3,180}?(?:Bakanlığından|Bakanlığından|Genel Müdürlüğünden|Başkanlığından|Rektörlüğünden|Belediye Başkanlığından|Müdürlüğünden|Üniversitesinden))\s*:?\s*$",re.I)
+    blocks=[]; current_heading="Resmî Gazete"; current=[]
+    for line in lines:
+        if heading_re.search(line) and current:
+            blocks.append((current_heading,current)); current_heading=line.rstrip(":"); current=[]
+        elif heading_re.search(line):
+            current_heading=line.rstrip(":")
+        current.append(line)
+    if current: blocks.append((current_heading,current))
+    out=[]
+    for index,(institution,block_lines) in enumerate(blocks):
+        block="\n".join(block_lines)
+        if not RE.search(block) or BAD.search(block[:500]):
+            continue
+        useful=[x for x in block_lines if RE.search(x)]
+        title=useful[0] if useful else institution+" personel alımı ilanı"
+        end_match=re.search(r"(?:son\s+başvuru(?:\s+tarihi)?|başvurular(?:ın)?\s+son\s+günü|başvuru\s+süresi)[^\d]{0,80}(\d{1,2}[./-]\d{1,2}[./-]\d{4})",block,re.I)
+        start_match=re.search(r"(?:başvurular?\s+)?(?:başlangıç|başlama)\s+tarihi[^\d]{0,50}(\d{1,2}[./-]\d{1,2}[./-]\d{4})",block,re.I)
+        count_match=re.search(r"(\d{1,4})\s*(?:adet|kişilik|kişi|personel|sözleşmeli\s+personel)",block,re.I)
+        score_match=re.search(r"\b(P93|P3|P94)\b",block,re.I)
+        min_match=re.search(r"(?:en\s+az|taban|asgari)\s*(?:KPSS\s*)?(?:puan[ıi])?\s*[:\-]?\s*(\d{2}(?:[.,]\d{1,2})?)",block,re.I)
+        edu_match=re.search(r"\b(ön\s+lisans|lisans|ortaöğretim|lise|ilköğretim)\b",block,re.I)
+        city_match=re.search(r"\b(İstanbul|Ankara|İzmir|Bursa|Antalya|Adana|Konya|Gaziantep|Kocaeli|Mersin|Kayseri|Samsun|Trabzon|Erzurum)\b",block,re.I)
+        end_date=date(end_match.group(1)) if end_match else None
+        start_date=date(start_match.group(1)) if start_match else None
+        out.append(item("resmi-gazete",page_url+"#notice-"+str(index),title,institution,page_url,block,
+            category="İşçi" if re.search(r"işçi\s+al[ıi]m",block,re.I) else "Memur",
+            city=city_match.group(1) if city_match else None,
+            education=edu_match.group(1) if edu_match else None,
+            scoreType=score_match.group(1).upper() if score_match else None,
+            minimumScore=float(min_match.group(1).replace(",", ".")) if min_match else None,
+            publishedAt=f"{date_key[:4]}-{date_key[4:6]}-{date_key[6:8]}",
+            startDate=start_date,endDate=end_date,
+            positionCount=int(count_match.group(1)) if count_match else None))
+    return out[:100]
+
 def decode_resmi(response):
     # Resmî Gazete's legacy announcement pages are served as Windows-1254.
     return response.content.decode("windows-1254", errors="replace")
@@ -133,8 +173,8 @@ def scrape_resmi():
                     print("Resmî Gazete içerik kontrolü:",u,"HTTP",page.status_code,"son URL",page.url,"başlangıç",body[:350],file=sys.stderr)
                     errors.append(f"{d}: bölüm başlığı/içerik doğrulanamadı")
                     continue
-                read_ok=True
                 found=parse_resmi(html,key,u)
+                read_ok=True
                 out.extend(found)
                 break
             if read_ok: break
