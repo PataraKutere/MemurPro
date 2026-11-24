@@ -784,9 +784,62 @@ async function fetchSbb(source) {
   }
 }
 
+
+function parseIskurPublicMemur(html, source) {
+  const rows = [...html.matchAll(/<tr\\b[^>]*>([\\s\\S]*?)<\\/tr>/gi)];
+  const seen = new Set();
+  const items = [];
+  for (const rowMatch of rows) {
+    const row = rowMatch[1];
+    const cells = [...row.matchAll(/<t[dh]\\b[^>]*>([\\s\\S]*?)<\\/t[dh]>/gi)].map(match => match[1]);
+    if (cells.length < 2) continue;
+    const title = xmlText(cells[1]);
+    if (!title || !/(personel\\s+al[ıi]m|memur\\s+al[ıi]m|zabıta\\s+memuru|itfaiye\\s+eri|sözleşmeli\\s+personel)/i.test(title)) continue;
+    if (/(sonuç|yerleştirilen|kazanan|iptal|düzeltme|atama sonucu)/i.test(title)) continue;
+    const linkMatch = row.match(/<a\\b[^>]*href=["']([^"']+)["'][^>]*>/i);
+    let detailUrl = source.homepage_url;
+    if (linkMatch) {
+      try {
+        const parsed = new URL(linkMatch[1], source.homepage_url);
+        if (parsed.hostname === 'www.iskur.gov.tr' || parsed.hostname === 'iskur.gov.tr') detailUrl = parsed.toString();
+      } catch {}
+    }
+    const dateText = xmlText(cells[0]);
+    const dateMatch = dateText.match(/(\\d{1,2})[./](\\d{1,2})[./](\\d{4})/);
+    const endDate = dateMatch ? dateMatch[3] + '-' + dateMatch[2].padStart(2, '0') + '-' + dateMatch[1].padStart(2, '0') : null;
+    const externalId = detailUrl !== source.homepage_url ? detailUrl : title.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9ğüşöçıİ]+/gi, '-') + '-' + (endDate || 'current');
+    if (seen.has(externalId)) continue;
+    seen.add(externalId);
+    items.push({
+      externalId, title, institution: 'İŞKUR Kamu Memur Alım İlanları',
+      summary: xmlText(row), category: 'Memur', city: 'İstanbul',
+      detailUrl, publishedAt: null, startDate: null, endDate,
+      sourceName: source.name, status: 'check_required'
+    });
+  }
+  return items.slice(0, 100);
+}
+
 async function fetchFeed(source) {
   if (source.id === 'resmi-gazete') {
     return { items: await fetchResmiGazete(source) };
+  }
+  if (source.adapter === 'iskur-public-memur') {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(source.feed_url || source.homepage_url, {
+        signal: controller.signal,
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; MemurPro/0.1; public-source-monitor)', 'accept': 'text/html,application/xhtml+xml', 'accept-language': 'tr-TR,tr;q=0.9' },
+        redirect: 'follow'
+      });
+      if (!response.ok) throw new Error('İŞKUR kamu memur ilanları HTTP ' + response.status + ' döndürdü.');
+      const html = await response.text();
+      if (html.length > 2_000_000) throw new Error('İŞKUR kamu memur sayfası güvenli boyut sınırını aşıyor.');
+      const items = parseIskurPublicMemur(html, source);
+      if (!items.length && !/Kamu Memur Alım İlanları|İstanbul iline ait İlanlar/i.test(html)) throw new Error('İŞKUR kamu memur ilan sayfası beklenen içeriği içermiyor.');
+      return { items };
+    } finally { clearTimeout(timeout); }
   }
   if (source.id === 'iskur' && !source.feed_url) {
     return { skipped: true, reason: 'İŞKUR iş arama hizmeti giriş gerektiriyor; doğrulanmış, herkese açık ve kimlik doğrulamasız ilan akışı bulunamadı.' };
@@ -931,7 +984,7 @@ async function syncConfiguredSources(env) {
     'ilan-gov': 60 * 60 * 1000,
     'kamuilan-sbb': 60 * 60 * 1000,
     'resmi-gazete': 24 * 60 * 60 * 1000,
-    'iskur': 60 * 60 * 1000
+    'iskur': 60 * 60 * 1000,\n    'iskur-kamu-memur': 30 * 60 * 1000
   };
 
   // Claim sources atomically, then fetch independent official sources concurrently.
