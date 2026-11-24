@@ -144,3 +144,16 @@ body{background:#0d1523;color:#e4eaf4}
 .deadline-countdown.upcoming{color:#e5bd72}
 .deadline-countdown.overdue{color:#ef918a}
 @media(max-width:620px){.tracking-summary{gap:8px;padding:12px}.tracking-summary span{font-size:9px}.application-tracker{align-items:stretch;gap:10px}.application-tracker label{width:100%;min-width:0}.application-tracker select,.application-tracker input{width:100%}.deadline-countdown{padding:2px 0 0}}
+
+
+/* Candidate eligibility assessment */
+.eligibility-result{margin-top:11px;padding:10px 12px;border:1px solid #34445c;border-radius:9px;background:#111c2b}
+.eligibility-result>strong{display:block;font-size:10px;color:#dce6f5}
+.eligibility-result ul{margin:7px 0 5px;padding-left:16px;color:#aebbd0;font-size:9px;line-height:1.6}
+.eligibility-result small{display:block;color:#8494aa;font-size:8px;line-height:1.45}
+.eligibility-result.eligible{border-color:#315c55;background:#172e2d}
+.eligibility-result.eligible>strong{color:#83d5b9}
+.eligibility-result.ineligible{border-color:#694447;background:#332328}
+.eligibility-result.ineligible>strong{color:#f09b98}
+.eligibility-result.unknown{border-color:#655337;background:#302a20}
+.eligibility-result.unknown>strong{color:#e9c47e}
