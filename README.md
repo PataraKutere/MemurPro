@@ -34,17 +34,25 @@ Bu depo `PataraKutere/MemurPro` adıyla oluşturulmuştur. Dosyalar kök dizinde
 3. Branch olarak `main`, klasör olarak `/ (root)` seçip **Save** düğmesine bas.
 4. Birkaç dakika sonra site şu adreste açılır: <https://patarakutere.github.io/MemurPro/>
 
+## Veri toplama mimarisi
+
+Kaynak taraması GitHub Actions üzerinde, Chromium tabanlı Playwright ile çalışır. Zamanlanmış görev `7,37 * * * *` (UTC) düzeninde yaklaşık 30 dakikada bir tetiklenir; ayrıca Actions ekranından elle `Run workflow` başlatılabilir. Standart runner, bu herkese açık depoda ücretsizdir. Kamu sitelerinin bot koruması, oturum veya erişim kısıtları aşılmaz; erişilemeyen kaynak hata olarak raporlanır.
+
+İlk kurulumda GitHub deposunda **Settings → Secrets and variables → Actions → New repository secret** yoluyla `MEMURPRO_INGEST_TOKEN` adlı secret eklenmelidir. Değeri, Cloudflare Worker `memurpro-api` içindeki mevcut `ADMIN_TOKEN` secret ile aynı olmalıdır. Bu token kaynak koduna yazılmaz.
+
+`collector/scrape.py` kaynaklardan veriyi toplar, sonuç/iptal duyurularını filtreler ve `POST /api/ingest` adresine gönderir. Worker artık kaynak siteleri taramaz; yalnızca token doğrular, alanları normalize eder, D1'e yazar ve kaynak hata sayacı/backoff bilgisini tutar.
+
 ## Cloudflare Worker API
 
-`worker/schema.sql` D1 veritabanı tablolarını ve resmî kaynak kayıtlarını oluşturur. `worker/index.js` şu uç noktaları sağlar:
+`worker/schema.sql` D1 veritabanı tablolarını ve resmî kaynak kayıtlarını oluşturur. Mevcut D1 veritabanları için `worker/migrations/001_ingestion_pipeline.sql` bir kez uygulanmalıdır. `worker/index.js` şu uç noktaları sağlar:
 
 - `GET /api/health`
 - `GET /api/sources`
 - `GET /api/listings`
-- `POST /api/sync-now` (public, synchronous response; source-specific polling limits and atomic claim are enforced)
+- `POST /api/ingest` (yalnızca `x-admin-token` başlığıyla; GitHub Actions tarafından çağrılır)
+- `GET /api/sources` ve `GET /api/listings` (herkese açık okuma uç noktaları)
 
-In the site, **Şimdi kontrol et** runs the source check without requiring a user to open Cloudflare. The request stays open until the Worker finishes and returns per-source results. The periodic Cron runs every 30 minutes, but individual source adapters apply their own lower polling frequency.
-- `POST /api/admin/sync` (yalnızca `x-admin-token` gizli başlığıyla)
+**Şimdi kontrol et** düğmesi GitHub Actions workflow sayfasını açar. `Run workflow` ile elle tarama başlatılabilir.
 
 ### Backend kurulum özeti
 
@@ -53,7 +61,7 @@ In the site, **Şimdi kontrol et** runs the source check without requiring a use
 3. D1 Console'da `worker/schema.sql` dosyasının tamamını çalıştır.
 4. Worker Settings → Bindings bölümünde D1 veritabanını `DB` adıyla bağla.
 5. Worker Settings → Variables and Secrets bölümünde `ADMIN_TOKEN` isminde rastgele ve güçlü bir secret oluştur. Bu değeri kaynak koda yazma.
-6. Worker için Cron Trigger ekle. MemurPro Worker `*/30 * * * *` takviminde çalışır. Kaynak başına istek aralıkları ayrıca sınırlandırılır: Kariyer Kapısı 30 dakika, ÖSYM/İlan.gov.tr/SBB 1 saat, Resmî Gazete RSS 24 saat. Böylece bütün kaynaklara her 30 dakikada bir gereksiz istek gönderilmez.
+6. Worker için Cron Trigger gerekmez; kaynak taraması GitHub Actions tarafından yapılır. Worker'ın Cron görevi devre dışı bırakılmıştır.
 7. `config.js` içindeki API adresi hazır kurulumda `https://memurpro-api.28berat28.workers.dev` olarak ayarlanmıştır.
 
 ### Kaynak bağlayıcıları
