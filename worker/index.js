@@ -786,26 +786,26 @@ async function fetchSbb(source) {
 
 
 function parseIskurPublicMemur(html, source) {
-  const rows = [...html.matchAll(/<tr\\b[^>]*>([\\s\\S]*?)<\\/tr>/gi)];
+  const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
   const seen = new Set();
   const items = [];
   for (const rowMatch of rows) {
     const row = rowMatch[1];
-    const cells = [...row.matchAll(/<t[dh]\\b[^>]*>([\\s\\S]*?)<\\/t[dh]>/gi)].map(match => match[1]);
+    const cells = [...row.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(match => match[1]);
     if (cells.length < 2) continue;
     const title = xmlText(cells[1]);
-    if (!title || !/(personel\\s+al[ıi]m|memur\\s+al[ıi]m|zabıta\\s+memuru|itfaiye\\s+eri|sözleşmeli\\s+personel)/i.test(title)) continue;
+    if (!title || !/(personel\s+al[ıi]m|memur\s+al[ıi]m|zabıta\s+memuru|itfaiye\s+eri|sözleşmeli\s+personel)/i.test(title)) continue;
     if (/(sonuç|yerleştirilen|kazanan|iptal|düzeltme|atama sonucu)/i.test(title)) continue;
-    const linkMatch = row.match(/<a\\b[^>]*href=["']([^"']+)["'][^>]*>/i);
+    const linkMatch = row.match(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/i);
     let detailUrl = source.homepage_url;
     if (linkMatch) {
       try {
         const parsed = new URL(linkMatch[1], source.homepage_url);
-        if (parsed.hostname === 'www.iskur.gov.tr' || parsed.hostname === 'iskur.gov.tr') detailUrl = parsed.toString();
+        if (parsed.hostname === 'www.iskur.gov.tr' || parsed.hostname === 'iskur.gov.tr' || parsed.hostname === 'media.iskur.gov.tr') detailUrl = parsed.toString();
       } catch {}
     }
     const dateText = xmlText(cells[0]);
-    const dateMatch = dateText.match(/(\\d{1,2})[./](\\d{1,2})[./](\\d{4})/);
+    const dateMatch = dateText.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);
     const endDate = dateMatch ? dateMatch[3] + '-' + dateMatch[2].padStart(2, '0') + '-' + dateMatch[1].padStart(2, '0') : null;
     const externalId = detailUrl !== source.homepage_url ? detailUrl : title.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9ğüşöçıİ]+/gi, '-') + '-' + (endDate || 'current');
     if (seen.has(externalId)) continue;
