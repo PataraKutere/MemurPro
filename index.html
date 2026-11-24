@@ -25,7 +25,7 @@
 
       <div class="sidebar-label">ÇALIŞMA ALANI</div>
       <nav class="main-nav">
-        <button class="nav-link active" data-view="overview"><span aria-hidden="true" class="nav-icon">▦</span><span>Genel Bakış</span></button>
+        <button class="nav-link active" data-view="overview" aria-current="page"><span aria-hidden="true" class="nav-icon">▦</span><span>Genel Bakış</span></button>
         <button class="nav-link" data-view="listings"><span aria-hidden="true" class="nav-icon">▤</span><span>Kamu İlanları</span><span aria-hidden="true" class="nav-arrow">›</span></button>
         <button class="nav-link" data-view="saved"><span aria-hidden="true" class="nav-icon">☆</span><span>Takip Listem</span><span class="saved-count" id="savedCount">0</span></button>
         <button class="nav-link" data-view="tools"><span aria-hidden="true" class="nav-icon">⌘</span><span>Araçlar</span></button>
@@ -126,7 +126,7 @@
             <label class="field"><span>KPSS puan türü</span><select id="scoreFilter"><option value="">Tümü</option><option>P93</option><option>P94</option><option>P3</option><option>KPSS şartı yok</option></select><small class="field-hint" id="scoreSuggestion">Öğrenim düzeyi seçildiğinde uygun KPSS türü önerilir.</small></label>
             <label class="field"><span>İstihdam türü</span><select id="employmentTypeFilter"><option value="">Tümü</option><option>Memur</option><option>Sözleşmeli personel</option><option>İşçi</option><option>Belirtilmemiş</option></select></label>
             <label class="field"><span>Kurum türü</span><select id="institutionTypeFilter"><option value="">Tümü</option><option>Belediye</option><option>Üniversite</option><option>Bakanlık / Başkanlık</option><option>Diğer kamu kurumu</option></select></label>
-            <label class="field"><span>Duyuru türü</span><select id="announcementTypeFilter"><option value="">Tümü</option><option>Personel alımı</option><option>KPSS tercih / yerleştirme</option><option>Duyuru</option><option>Diğer ilan</option></select></label>
+            <label class="field"><span>Duyuru türü</span><select id="announcementTypeFilter"><option value="">Tümü</option><option>Personel alımı</option><option>KPSS / sınav duyurusu</option><option>Duyuru</option><option>Diğer ilan</option></select></label>
           </div>
           <div class="filter-bottom filter-open-only"><label class="open-only-control"><input type="checkbox" id="openOnlyFilter" checked><span>Süresi geçmemiş ilanlar (tarihi belirsizler en altta)</span></label></div>
           <div class="source-filter-row">
@@ -194,7 +194,7 @@
   </div>
 
   <div class="mobile-nav" aria-label="Mobil menü">
-    <button class="mobile-nav-link active" data-view="overview"><span aria-hidden="true">▦</span><small>Özet</small></button>
+    <button class="mobile-nav-link active" data-view="overview" aria-current="page"><span aria-hidden="true">▦</span><small>Özet</small></button>
     <button class="mobile-nav-link" data-view="listings"><span aria-hidden="true">▤</span><small>İlanlar</small></button>
     <button class="mobile-nav-link" data-view="saved"><span aria-hidden="true">☆</span><small>Takip</small></button>
     <button class="mobile-nav-link" data-view="tools"><span aria-hidden="true">⌘</span><small>Araçlar</small></button>
