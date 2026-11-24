@@ -166,7 +166,10 @@ function renderSourceStatuses(sources) {
     const labels = { connected: 'Bağlı', pending: 'Bağlantı bekliyor', failed: 'Kontrol hatası' };
     stateEl.textContent = labels[source.status] || 'Durum bilinmiyor';
     stateEl.className = `source-state ${source.status || 'pending'}`;
-    if (source.checkedAt) stateEl.title = `Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`;
+    const details = [];
+    if (source.checkedAt) details.push(`Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`);
+    if (source.lastError) details.push(`Açıklama: ${source.lastError}`);
+    stateEl.title = details.join(' · ') || 'Henüz kontrol edilmedi.';
   });
 }
 
