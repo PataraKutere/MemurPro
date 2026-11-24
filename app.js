@@ -135,7 +135,7 @@ function safeListingUrl(value) {
 
 function listingCard(listing) {
   const saved = isSaved(listing.id);
-  const status = listing.status === 'open' ? 'Başvuru açık' : (listing.status === 'closed' ? 'Başvuru kapandı' : 'Kontrol gerekli');
+  const status = listing.status === 'open' ? 'Başvuru açık' : (listing.status === 'closed' ? 'Başvuru kapandı' : (isFutureStartDate(listing) ? 'Başvuru yakında' : 'Kontrol gerekli'));
   const start = formatListingDate(listing.startDate);
   const end = formatListingDate(listing.endDate);
   const dateRange = start && end ? `${start} – ${end}` : start ? `${start} – Bitiş tarihi belirtilmemiş` : end ? `Başlangıç belirtilmemiş – ${end}` : 'Başvuru tarih aralığı kaynakta belirtilmemiş';
@@ -283,11 +283,21 @@ function inferredAnnouncementType(item) {
   return 'Diğer ilan';
 }
 
+function todayInIstanbul() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return values.year + '-' + values.month + '-' + values.day;
+}
+
+function isFutureStartDate(item) {
+  const start = String(item.startDate || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(start) && start > todayInIstanbul();
+}
+
 function isPastDeadline(item) {
   if (!item.endDate) return false;
   const end = String(item.endDate).slice(0, 10);
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(new Date());
-  return /^\d{4}-\d{2}-\d{2}$/.test(end) && end < today;
+  return /^\d{4}-\d{2}-\d{2}$/.test(end) && end < todayInIstanbul();
 }
 
 function applyFilters(listings) {
