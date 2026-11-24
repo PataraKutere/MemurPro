@@ -23,7 +23,7 @@ def decode(r):
     return r.content.decode("windows-1254",errors="replace")
 def date(v):
     v=tx(v)
-    iso=re.match(r"^(\\d{4}-\\d{2}-\\d{2})",v)
+    iso=re.match(r"^(\d{4}-\d{2}-\d{2})",v)
     if iso: return iso.group(1)
     m=re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})",v)
     if m:
@@ -81,20 +81,24 @@ def scrape_kariyer(browser):
             p.wait_for_timeout(1800)
         except Exception as exc:
             print("Kariyer sayfa açılışı:",str(exc)[:180],file=sys.stderr)
+        print("Kariyer sayfası XHR adresleri:",", ".join(dict.fromkeys(api_urls[-10:])) or "XHR bulunamadı",file=sys.stderr)
         if captured:
             return kariyer_rows(max(captured,key=lambda x:len(x.get("searchIlan",[]))))
-        resp=p.request.post("https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage",
-          data={"krM_ID":0,"searchText":"","il":"0","ilanTuru":"0"},
-          headers={"Referer":"https://kariyerkapisi.gov.tr/isealim","Origin":"https://kariyerkapisi.gov.tr"},
-          timeout=20000)
-        if not resp.ok: raise RuntimeError(f"Kariyer API HTTP {resp.status}")
-        payload=resp.json()
-        if not isinstance(payload,dict) or not isinstance(payload.get("searchIlan"),list):
-            raise RuntimeError("Kariyer API searchIlan listesi döndürmedi.")
-        return kariyer_rows(payload)
-    except Exception as exc:
-        hints=", ".join(dict.fromkeys(api_urls[-6:]))
-        raise RuntimeError(f"{exc}; sayfada görülen XHR: {hints or 'GetIseAlimPage isteği görülmedi'}")
+        body={"krM_ID":0,"searchText":"","il":"0","ilanTuru":"0"}
+        last_error=None
+        for endpoint in ("https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage","https://kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage"):
+            try:
+                resp=p.request.post(endpoint,data=body,
+                  headers={"Referer":"https://kariyerkapisi.gov.tr/isealim","Origin":"https://kariyerkapisi.gov.tr"},
+                  timeout=12000)
+                if not resp.ok: raise RuntimeError(f"Kariyer API HTTP {resp.status}")
+                payload=resp.json()
+                if isinstance(payload,dict) and isinstance(payload.get("searchIlan"),list):
+                    return kariyer_rows(payload)
+                raise RuntimeError("Kariyer API searchIlan listesi döndürmedi.")
+            except Exception as exc:
+                last_error=exc
+        raise RuntimeError(f"İki resmî Kariyer API adresi yanıt vermedi: {last_error}")
     finally: p.close()
 
 def scrape_resmi():
