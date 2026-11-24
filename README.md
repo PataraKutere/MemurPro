@@ -44,7 +44,7 @@ Kaynak taraması GitHub Actions üzerinde, Chromium tabanlı Playwright ile çal
 
 ## Cloudflare Worker API
 
-`worker/schema.sql` D1 veritabanı tablolarını ve resmî kaynak kayıtlarını oluşturur. Mevcut D1 veritabanları için `worker/migrations/001_ingestion_pipeline.sql` bir kez uygulanmalıdır. `worker/index.js` şu uç noktaları sağlar:
+`worker/schema.sql` D1 veritabanı tablolarını ve resmî kaynak kayıtlarını oluşturur. Mevcut D1 veritabanlarında `worker/migrations/001_ingestion_pipeline.sql` ve ardından `worker/migrations/002_source_health.sql` birer kez uygulanmalıdır. `worker/index.js` şu uç noktaları sağlar:
 
 - `GET /api/health`
 - `GET /api/sources`
