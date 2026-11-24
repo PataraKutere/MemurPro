@@ -153,6 +153,7 @@ function listingCard(listing) {
       <h3>${escapeHTML(listing.title || 'İsimsiz ilan')}</h3>
       <div class="listing-facts">
         ${listingFact('Başvuru tarihleri', dateRange)}
+        ${listing.positionCount ? listingFact('Kontenjan', `${listing.positionCount} kişi`) : ''}
         ${listingFact('Aranan bölümler / öğrenim', education)}
         ${listingFact('KPSS şartı ve puan', score)}
       </div>
