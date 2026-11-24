@@ -20,14 +20,27 @@ function decodeNumericEntity(_match, hex, decimal) {
   return String.fromCodePoint(codePoint);
 }
 
+function decodeHtmlEntities(value) {
+  let text = String(value ?? '');
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ccedil: 'ç', uuml: 'ü', ouml: 'ö' };
+  for (let pass = 0; pass < 4; pass++) {
+    const decoded = text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, code) => {
+      if (code[0] === '#') return code[1]?.toLowerCase() === 'x'
+        ? decodeNumericEntity(entity, code.slice(2), '')
+        : decodeNumericEntity(entity, '', code.slice(1));
+      return Object.prototype.hasOwnProperty.call(named, code.toLowerCase()) ? named[code.toLowerCase()] : entity;
+    });
+    if (decoded === text) break;
+    text = decoded;
+  }
+  return text;
+}
+
 function xmlText(value) {
-  return safeText(String(value ?? '')
+  const plain = String(value ?? '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
-    .replace(/&#(?:x([0-9a-f]+)|(\d+));/gi, decodeNumericEntity));
+    .replace(/<[^>]+>/g, ' ');
+  return safeText(decodeHtmlEntities(plain));
 }
 
 function tag(block, name) {
