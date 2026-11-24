@@ -90,6 +90,7 @@ function listingCard(listing) {
     <div><div class="listing-org">${escapeHTML(listing.institution || 'Kurum bilgisi belirtilmemiş')}</div>
       <h3>${escapeHTML(listing.title || 'İsimsiz ilan')}</h3>
       <p>${escapeHTML(listing.summary || '')}</p>
+      ${eligibilityMarkup(listing)}
       <div class="listing-meta">${chips}<span class="meta-chip">${escapeHTML(deadline)}</span></div>
       <div class="listing-meta"><span class="listing-status">${escapeHTML(status)}</span><span class="meta-chip">Kaynak: ${escapeHTML(listing.sourceName || 'Resmî kaynak')}</span></div>
     </div>
@@ -134,73 +135,91 @@ function renderListings() {
   $('#listingResults').innerHTML = filtered.length ? filtered.map(listingCard).join('') : `<div class="listing-placeholder"><strong>Bu kriterlerle eşleşen ilan yok</strong><p>Filtrelerini değiştirerek yeniden deneyebilirsin.</p></div>`;
 }
 
-function getProfileMatch(listing) {
-  const profile = state.profile;
-  const hasScore = profile && profile.score !== null && profile.score !== undefined && profile.score !== '';
-  if (!profile || !(profile.education || profile.scoreType || profile.city || hasScore)) return null;
-  let points = 0;
-  let known = 0;
-  const reasons = [];
-  if (profile.education) {
-    if (listing.education) {
-      known++;
-      if (listing.education === profile.education) { points += 3; reasons.push('Öğrenim uyumu'); }
-      else return { matched: false, points: 0, reasons: ['Öğrenim düzeyi farklı'] };
-    }
-  }
-  if (profile.scoreType) {
-    if (listing.scoreType) {
-      known++;
-      if (listing.scoreType === profile.scoreType) { points += 3; reasons.push('KPSS türü uyumu'); }
-      else if (listing.scoreType !== 'KPSS şartı yok') return { matched: false, points: 0, reasons: ['KPSS puan türü farklı'] };
-    } else if (/KPSS şartı yok/i.test(listing.summary || '')) {
-      known++;
-      points += 2;
-      reasons.push('KPSS şartı aranmıyor');
-    }
-  }
-  if (profile.city) {
-    if (listing.city) {
-      known++;
-      if (listing.city.toLocaleLowerCase('tr-TR') === profile.city.toLocaleLowerCase('tr-TR') || listing.city === 'Türkiye Geneli') {
-        points += listing.city === 'Türkiye Geneli' ? 1 : 2;
-        reasons.push(listing.city === 'Türkiye Geneli' ? 'Türkiye geneli' : 'Şehir uyumu');
-      } else return { matched: false, points: 0, reasons: ['Şehir tercihi farklı'] };
-    }
-  }
-  if (Number.isFinite(Number(profile.score)) && profile.score !== null && profile.score !== '') {
-    if (Number.isFinite(Number(listing.minimumScore))) {
-      known++;
-      if (Number(profile.score) >= Number(listing.minimumScore)) {
-        points += 2;
-        reasons.push('Puan barajı karşılanıyor');
-      } else return { matched: false, points: 0, reasons: ['KPSS puanı barajın altında'] };
-    }
-  }
-  return { matched: true, points, known, reasons };
+function hasCandidateProfile() {
+  const p = state.profile;
+  return Boolean(p && (p.education || p.scoreType || p.city || (p.score !== null && p.score !== undefined && p.score !== '')));
 }
 
+function normalizeEducation(value) {
+  const text = String(value || '').toLocaleLowerCase('tr-TR').replace(/\\s+/g, ' ').trim();
+  if (/ön ?lisans|on ?lisans|associate/.test(text)) return 'ön lisans';
+  if (/orta ?öğretim|lise|ortaöğretim/.test(text)) return 'ortaöğretim';
+  if (/lisans|üniversite/.test(text)) return 'lisans';
+  if (/doktora|doktora/.test(text)) return 'doktora';
+  return text;
+}
+
+function assessListing(listing) {
+  if (!hasCandidateProfile()) return { status: 'unknown', label: 'Profil gerekli', checks: ['Aday profilini tamamla.'] };
+  const p = state.profile;
+  const checks = [];
+  let failed = false;
+  let unknown = false;
+  const markUnknown = (message) => { unknown = true; checks.push(message); };
+  const markPass = (message) => checks.push(message);
+  const markFail = (message) => { failed = true; checks.push(message); };
+
+  if (p.education) {
+    if (!listing.education) markUnknown('İlanın öğrenim şartı kaynak verisinde yok.');
+    else if (normalizeEducation(p.education) === normalizeEducation(listing.education)) markPass('Öğrenim düzeyi eşleşiyor.');
+    else markFail(`Öğrenim şartı farklı: ${listing.education}.`);
+  }
+  if (p.scoreType) {
+    if (listing.scoreType) {
+      if (/KPSS şartı yok|KPSS aranmıyor/i.test(listing.scoreType)) markPass('Bu ilanda KPSS puan türü şartı görünmüyor.');
+      else if (String(listing.scoreType).toUpperCase().includes(String(p.scoreType).toUpperCase())) markPass(`${p.scoreType} puan türü eşleşiyor.`);
+      else markFail(`Puan türü farklı: ${listing.scoreType}.`);
+    } else if (/KPSS şartı yok|KPSS aranmıyor/i.test(listing.summary || '')) {
+      markPass('İlan metninde KPSS şartı aranmadığı belirtiliyor.');
+    } else markUnknown('KPSS puan türü ilan verisinde doğrulanmamış.');
+  }
+  if (p.city) {
+    if (!listing.city) markUnknown('Görev yeri ilan verisinde belirtilmemiş.');
+    else if (String(listing.city).toLocaleLowerCase('tr-TR') === String(p.city).toLocaleLowerCase('tr-TR') || listing.city === 'Türkiye Geneli') {
+      markPass(listing.city === 'Türkiye Geneli' ? 'Türkiye geneli ilana şehir tercihinle başvurabilirsin.' : 'Şehir tercihin eşleşiyor.');
+    } else markFail(`Görev yeri farklı: ${listing.city}.`);
+  }
+  const hasScore = p.score !== null && p.score !== undefined && p.score !== '' && Number.isFinite(Number(p.score));
+  if (hasScore) {
+    if (listing.minimumScore === null || listing.minimumScore === undefined || listing.minimumScore === '') markUnknown('Asgari KPSS puanı kaynak verisinde yok.');
+    else if (Number(p.score) >= Number(listing.minimumScore)) markPass(`Puanın asgari ${Number(listing.minimumScore)} şartını karşılıyor.`);
+    else markFail(`Puanın asgari ${Number(listing.minimumScore)} şartının altında.`);
+  }
+  const status = failed ? 'ineligible' : unknown ? 'unknown' : 'eligible';
+  const label = status === 'eligible' ? 'Bilinen şartlarla uyumlu' : status === 'ineligible' ? 'En az bir şart uyuşmuyor' : 'Şartlar eksik — kontrol gerekli';
+  if (!checks.length) checks.push('Profil bilgisi veya ilan şartı yetersiz.');
+  return { status, label, checks };
+}
+
+function eligibilityMarkup(listing) {
+  if (!hasCandidateProfile()) return '';
+  const result = assessListing(listing);
+  const details = result.checks.map(item => `<li>${escapeHTML(item)}</li>`).join('');
+  return `<div class="eligibility-result ${result.status}">
+    <strong>${escapeHTML(result.label)}</strong>
+    <ul>${details}</ul>
+    <small>Ön değerlendirmedir; nihai şartlar resmî ilanda ve eklerinde kontrol edilmelidir.</small>
+  </div>`;
+}
 function renderMatchedListings() {
   const container = $('#matchedListings');
   if (!container) return;
-  const profile = state.profile;
-  if (!profile || !(profile.education || profile.scoreType || profile.city || (profile.score !== null && profile.score !== undefined && profile.score !== ''))) {
-    container.innerHTML = `<div class="listing-placeholder"><strong>Aday profilini tamamla</strong><p>Öğrenim, KPSS türü, puan ve şehir bilgilerini ekleyerek ilan eşleştirmesini etkinleştir. Bilgilerin yalnızca bu cihazda saklanır.</p><button class="button button-outline" data-go="tools">Aday profilini oluştur</button></div>`;
+  if (!hasCandidateProfile()) {
+    container.innerHTML = `<div class="listing-placeholder"><strong>Aday profilini tamamla</strong><p>Öğrenim, KPSS türü, puan ve şehir bilgilerini ekleyerek ilan şartlarını karşılaştır. Bilgilerin yalnızca bu cihazda saklanır.</p><button class="button button-outline" data-go="tools">Aday profilini oluştur</button></div>`;
     return;
   }
-  const matches = state.listings.map(item => ({ item, match: getProfileMatch(item) }))
-    .filter(entry => entry.match && entry.match.matched)
-    .sort((a,b) => b.match.points-a.match.points || (b.item.publishedAt || '').localeCompare(a.item.publishedAt || ''));
-  if (!matches.length) {
-    container.innerHTML = `<div class="listing-placeholder"><strong>Şu an eşleşen ilan bulunamadı</strong><p>Bu, uygun ilan olmadığı anlamına kesin olarak gelmez. Kaynaklarda öğrenim, puan türü veya şehir bilgisi eksik olabilir. Profilini güncelleyebilir ya da tüm ilanları inceleyebilirsin.</p><button class="button button-outline" data-go="listings">Tüm ilanları gör</button></div>`;
+  const evaluated = state.listings.map(item => ({ item, result: assessListing(item) }));
+  const candidates = evaluated.filter(entry => entry.result.status !== 'ineligible')
+    .sort((a,b) => {
+      const rank = { eligible: 0, unknown: 1, ineligible: 2 };
+      return rank[a.result.status] - rank[b.result.status] || (b.item.publishedAt || '').localeCompare(a.item.publishedAt || '');
+    });
+  if (!candidates.length) {
+    container.innerHTML = `<div class="listing-placeholder"><strong>Bilinen şartlarla uyuşan ilan yok</strong><p>İlanların tamamında profilinle çelişen en az bir bilgi bulundu. Yine de resmî ilanları kendin incele; kaynak verileri eksik veya güncel olmayabilir.</p><button class="button button-outline" data-go="listings">Tüm ilanları gör</button></div>`;
     return;
   }
-  container.innerHTML = matches.slice(0,4).map(({item,match}) => {
-    const reasons = match.reasons.length ? match.reasons.join(' · ') : 'İlan şartlarında çelişen bilgi yok; ayrıntıları resmî kaynaktan doğrula.';
-    return listingCard(item).replace('<div class="listing-org">', `<div class="match-reasons">${escapeHTML(reasons)}</div><div class="listing-org">`);
-  }).join('');
+  container.innerHTML = candidates.slice(0,4).map(({item}) => listingCard(item)).join('');
 }
-
 const APPLICATION_STATUSES = [
   ['review', 'İncelenecek'],
   ['documents', 'Evrak hazırlanıyor'],
