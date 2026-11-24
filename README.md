@@ -13,9 +13,9 @@
 
 ## Önemli: canlı ilan durumu
 
-Bu sürümde Cloudflare Worker ve D1 veritabanı kuruldu. ÖSYM duyuruları, Kariyer Kapısı'nın JSON ilan listesi, İlan.gov.tr'nin Kamu-Akademik Personel API'si, SBB portalının liste sayfası ve Resmî Gazete RSS'i için kaynak adaptörleri eklendi. Kariyer Kapısı, SBB ve İlan.gov.tr kaynakları erişim kısıtları uygulayabilir. Worker gerçek istek başarılı olursa kaynağı bağlı, başarısız olursa hata olarak işaretler. SBB'nin ilan detay/PDF bağlantıları oturuma bağlı olabildiği için MemurPro doğrudan kırılabilecek oturum URL'si yerine portal ana sayfasına yönlendirir. İŞKUR için henüz resmî, kimlik doğrulaması gerektirmeyen bir kamu ilanı API uç noktası doğrulanmadı. e-Devlet üzerinden erişilebilen iş arama hizmeti, kullanıcı oturumu gerektirdiği için MemurPro tarafından otomatik oturum açma yoluyla kullanılmaz.
+Bu sürümde Cloudflare Worker ve D1 veritabanı kuruldu. Gerçek veri toplama `collector/scrape.py` dosyasındaki ayrı kaynak adaptörleriyle GitHub Actions üzerinde yapılır; Worker kaynak siteleri taramaz, yalnızca gelen kayıtları doğrular ve D1'e yazar. Kolektör; Kariyer Kapısı'nın JSON uç noktasını, Resmî Gazete fihristindeki çeşitli ilan sayfalarını ve PDF alternatiflerini, ÖSYM KPSS duyurularını, İlan.gov.tr Kamu-Akademik Personel listesini, SBB portalını ve oturumsuz İŞKUR kamu ilanı sayfasını kontrol eder. Bu kaynakların hepsi her çalıştırmada başarılı değildir: Kariyer Kapısı HTTP 406 ve SBB HTTP 403 gibi erişim hataları verebilir; İŞKUR'da oturumsuz kamu listesi bulunamazsa kaynak atlanır. Erişim kısıtları aşılmaz ve doğrulanamayan ilan koşulları kesin bilgi gibi gösterilmez. SBB detay/PDF bağlantıları oturuma bağlı olabildiği için portal ana sayfası kullanılır.
 
-Resmî kaynak dizini (Resmî Gazete RSS bağlayıcısı `https://www.resmigazete.gov.tr/rss/rss.xml` adresini kullanacak şekilde yapılandırılmıştır; gerçek erişim ilk senkronizasyonda doğrulanır):
+Kolektörün kontrol ettiği resmî kaynak dizini (Resmî Gazete için doğrulanmış bir RSS varsayılmaz; fihrist ve tarihli HTML/PDF alternatifleri kullanılır):
 - Kariyer Kapısı: <https://kariyerkapisi.gov.tr/>
 - ÖSYM KPSS: <https://www.osym.gov.tr/SinavGrubu/Index/3>
 - İŞKUR: <https://www.iskur.gov.tr/>
@@ -66,7 +66,7 @@ Kaynak taraması GitHub Actions üzerinde, Chromium tabanlı Playwright ile çal
 
 ### Kaynak bağlayıcıları
 
-Worker kaynak kimliğine göre özel bağlayıcılar çalıştırır: `kariyer-kapisi` (Kariyer Kapısı JSON API), `osym-kpss` (ÖSYM KPSS duyuru listesi), `ilan-gov` (İlan.gov.tr Kamu-Akademik Personel API), `sbb-portal` (SBB portal liste sayfası) ve `feed` (RSS/JSON; Resmî Gazete RSS). `iskur` kaynağı için giriş gerektirmeyen resmî kamu ilanı API'si doğrulanana kadar otomatik veri çekilmez. RSS/JSON bağlayıcılarında `feed_url` ve `feed_type` alanları kullanılır.
+Gerçek kaynak adaptörleri `collector/scrape.py` içinde bulunur: `kariyer-kapisi`, `resmi-gazete`, `osym`, `ilan-gov`, `kamuilan-sbb` ve `iskur`. Worker tarafındaki RSS/JSON normalleştirme yardımcıları genel amaçlıdır; mevcut altı kaynağın taramasının yapıldığı anlamına gelmez. İŞKUR adaptörü yalnızca oturumsuz kamu filtresi gerçekten kullanılabiliyorsa kayıt gönderir; aksi durumda kaynak atlanır.
 
 JSON akışı aşağıdaki normalize edilmiş alanları içermelidir:
 
