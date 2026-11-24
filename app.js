@@ -475,7 +475,7 @@ function renderSourceStatuses(sources) {
     const pending = sources.filter(source => source.status === 'pending').length;
     const connected = sources.filter(source => source.status === 'connected').length;
     const detail = checked ? `Son kaynak kontrolü: ${checked.toLocaleString('tr-TR')}` : 'Henüz kaynak kontrol kaydı yok.';
-    const status = `Otomatik kontrol etkin · 30 dakikada bir · ${connected} ilan akışı bağlı, ${degraded} site açık/akış hatalı, ${failed} erişilemiyor, ${pending} beklemede. ${detail}`;
+    const status = `GitHub Actions kaynak taraması planlı · 30 dakikada bir · ${connected} ilan akışı bağlı, ${degraded} site açık/akış hatalı, ${failed} erişilemiyor, ${pending} beklemede. ${detail}`;
     const label = $('span:last-child', footnote);
     if (label) label.textContent = status;
     footnote.title = status;
@@ -494,7 +494,9 @@ function renderSourceStatuses(sources) {
     const details = [];
     if (source.lastError) details.push(source.lastError);
     else if (source.checkedAt) details.push(`Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`);
-    else details.push('Zamanlayıcı etkin; bu kaynak için ilk kontrol henüz tamamlanmadı.');
+    else details.push('GitHub Actions ilk veri aktarımı bekleniyor.');
+    if (source.failureCount) details.push(`${source.failureCount} ardışık hata`);
+    if (source.backoffUntil) details.push(`Yeniden deneme: ${new Date(source.backoffUntil).toLocaleString('tr-TR')}`);
     if (detailEl) {
       detailEl.textContent = details.join(' · ');
       detailEl.title = details.join(' · ');
