@@ -23,6 +23,8 @@ def decode(r):
     return r.content.decode("windows-1254",errors="replace")
 def date(v):
     v=tx(v)
+    iso=re.match(r"^(\\d{4}-\\d{2}-\\d{2})",v)
+    if iso: return iso.group(1)
     m=re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})",v)
     if m:
         d,mo,y=m.groups(); return f"{y}-{int(mo):02d}-{int(d):02d}"
@@ -114,6 +116,7 @@ def scrape_resmi():
                 has_section=bool(re.search(r"çeşitli\s+il[âa]nlar",body,re.I))
                 has_recruitment=bool(RE.search(body))
                 if not has_section and not has_recruitment:
+                    print("Resmî Gazete içerik kontrolü:",u,"HTTP",page.status,"son URL",page.url,"başlangıç",body[:350],file=sys.stderr)
                     errors.append(f"{d}: bölüm başlığı/içerik doğrulanamadı")
                     continue
                 read_ok=True
@@ -226,7 +229,7 @@ def scrape_sbb(browser):
         return sbb_html(p.content())
     finally: p.close()
 
-SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":lambda b:scrape_ilan(),"kamuilan-sbb":scrape_sbb,"iskur":scrape_iskur}
+SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":scrape_ilan,"kamuilan-sbb":scrape_sbb,"iskur":scrape_iskur}
 def report(sid,items=None,error=None):
     if not TOKEN: raise RuntimeError("MEMURPRO_INGEST_TOKEN secret is missing")
     r=requests.post(API+"/api/ingest",headers={"x-admin-token":TOKEN},json={"sourceId":sid,"items":items or [],"error":error},timeout=30); r.raise_for_status(); return r.json()
