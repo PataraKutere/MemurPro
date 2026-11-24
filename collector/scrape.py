@@ -310,32 +310,97 @@ def scrape_ilan(browser):
 def scrape_iskur(browser):
     p=browser.new_page()
     try:
-        p.goto("https://esube.iskur.gov.tr/Istihdam/AcikIsIlanAra.aspx",wait_until="domcontentloaded",timeout=25000); p.wait_for_timeout(1200)
-        sels=p.locator("select"); chosen=False
-        for i in range(sels.count()):
-            sel=sels.nth(i); opts=sel.locator("option")
-            for j in range(opts.count()):
-                opt=opts.nth(j)
-                option_label=tx(opt.inner_text()).casefold()
-                if option_label=="kamu" or option_label.startswith("kamu "):
-                    sel.select_option(opt.get_attribute("value")); chosen=True; break
-            if chosen: break
-        if not chosen: raise RuntimeError("Oturumsuz İŞKUR sayfasında Kamu filtresi yok; kaynak atlandı.")
-        buttons=p.locator("input[type=submit],button")
-        for i in range(buttons.count()):
-            b=buttons.nth(i); label=(b.get_attribute("value") or b.inner_text()).lower()
-            if "ara" in label or "listele" in label:
-                b.click(); p.wait_for_load_state("domcontentloaded",timeout=10000); break
-        soup=BeautifulSoup(p.content(),"html.parser"); out=[]
-        for row in soup.select("tr"):
-            a=row.find("a",href=True); title=tx(a) if a else ""
-            if not a or len(title)<5: continue
+        p.goto("https://esube.iskur.gov.tr/Istihdam/AcikIsIlanAra.aspx",wait_until="domcontentloaded",timeout=25000)
+        p.wait_for_timeout(1800)
+
+        # İŞKUR e-Şube'de "Kamu" bir select option değil, İşyeri Türü
+        # alanında ayrı bir radio/checkbox seçeneğidir.
+        chosen=False
+        labels=p.locator("label")
+        for i in range(labels.count()):
+            lab=labels.nth(i)
+            if re.fullmatch(r"kamu",tx(lab.inner_text()),re.I):
+                target=lab.get_attribute("for")
+                if target:
+                    control=p.locator("#"+target)
+                    if control.count():
+                        control.check(force=True)
+                    else:
+                        lab.click(force=True)
+                else:
+                    lab.click(force=True)
+                chosen=True
+                break
+
+        if not chosen:
+            controls=p.locator('input[type="radio"],input[type="checkbox"]')
+            for i in range(controls.count()):
+                control=controls.nth(i)
+                info=control.evaluate("""el => {
+                    const labels=[...(el.labels||[])].map(x=>x.innerText||'').join(' ');
+                    let p=el.parentElement, parts=[];
+                    for(let n=0;n<3 && p;n++,p=p.parentElement) parts.push(p.innerText||'');
+                    return {labels,parents:parts};
+                }""")
+                texts=[tx(info.get("labels",""))]+[tx(x) for x in info.get("parents",[])]
+                if any(re.fullmatch(r"kamu",x,re.I) for x in texts):
+                    control.check(force=True)
+                    chosen=True
+                    break
+
+        if not chosen:
+            raise RuntimeError("İŞKUR e-Şube sayfasında İşyeri Türü > Kamu seçim kutusu bulunamadı.")
+
+        p.wait_for_timeout(300)
+        # Ara butonu sayfada submit dışı bir kontrol olabileceğinden metinle de aranır.
+        clicked=False
+        for selector in ['input[type="submit"]','input[type="button"]','button','a']:
+            els=p.locator(selector)
+            for i in range(els.count()):
+                el=els.nth(i)
+                label=tx(el.get_attribute("value") or el.inner_text())
+                if re.fullmatch(r"ara",label,re.I):
+                    el.click(force=True)
+                    clicked=True
+                    break
+            if clicked: break
+        if not clicked:
+            raise RuntimeError("İŞKUR kamu filtresi seçildi ancak Ara kontrolü bulunamadı.")
+
+        try:
+            p.wait_for_load_state("domcontentloaded",timeout=10000)
+        except Exception:
+            pass
+        p.wait_for_timeout(1800)
+
+        # İlan kartları bazı sayfa sürümlerinde tablo satırı değil bağlantı/kart olarak geliyor.
+        soup=BeautifulSoup(p.content(),"html.parser")
+        out=[]; seen=set()
+        for a in soup.find_all("a",href=True):
+            title=tx(a.get_text(" ",strip=True))
             href=urljoin("https://esube.iskur.gov.tr/",a["href"])
-            if "ilan" not in href.lower() and "acikis" not in href.lower(): continue
-            out.append(item("iskur",href,title,"İŞKUR aracılığıyla kamu işçi alımı",href,tx(row),category="İşçi"))
-        if not out: raise RuntimeError("Kamu filtresinde oturumsuz okunabilir ilan listesi yok.")
-        return out[:100]
-    finally: p.close()
+            if len(title)<4 or not re.search(r"ilan|acikis",href,re.I):
+                continue
+            if href in seen: continue
+            seen.add(href)
+            parent=a
+            card_text=title
+            for _ in range(4):
+                if parent.parent:
+                    parent=parent.parent
+                    candidate=tx(parent.get_text(" ",strip=True))
+                    if len(candidate)>len(title) and (re.search(r"\\d{8,11}",candidate) or re.search(r"son başvuru|açık pozisyon|çalışma yeri",candidate,re.I)):
+                        card_text=candidate
+                        break
+            out.append(item("iskur",href,title,"İŞKUR kamu işyeri türü filtresinden listelenen açık iş ilanı",href,card_text,category="İşçi"))
+        if not out:
+            body=tx(p.locator("body").inner_text())
+            if re.search(r"aradığınız kriterlere uygun kayıt bulunamadı",body,re.I):
+                return []
+            raise RuntimeError("Kamu filtresi uygulandı ancak sayfadan okunabilir ilan bağlantısı çıkarılamadı.")
+        return out[:150]
+    finally:
+        p.close()
 
 def scrape_sbb(browser):
     p=browser.new_page()
