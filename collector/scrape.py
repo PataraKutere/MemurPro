@@ -142,6 +142,9 @@ def scrape_kariyer(browser):
                     raise RuntimeError("Kariyer API searchIlan listesi döndürmedi.")
                 except Exception as exc:
                     last_error=exc
+                    if "HTTP 406" in str(exc):
+                        # 406 istemin reddedildiğini gösterir; aynı isteği tekrar denemek sonuç vermiyor.
+                        break
                     if attempt<2: time.sleep(1.5*(2**attempt))
         raise RuntimeError(f"İki resmî Kariyer API adresi yanıt vermedi: {last_error}")
     finally: p.close()
