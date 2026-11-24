@@ -453,8 +453,40 @@ def scrape_iskur_memur(browser):
             eid=detail if detail!=url else re.sub(r"\W+","-",title.lower())+"-"+(end_date or "current")
             if eid in seen: continue
             seen.add(eid)
+            # İŞKUR listesi yalnızca başlık ve bitiş tarihini verir; ayrıntılı bölüm şartları
+            # bağlı resmî PDF ekinden alınır. Böylece "İlanın her alanında ara" gerçek içeriği tarar.
+            full_text=row_text
+            education=None
+            score_type=None
+            minimum_score=None
+            position_count=None
+            start_date=None
+            if link and detail.lower().split("?")[0].endswith(".pdf"):
+                try:
+                    pdf_response=S.get(detail,timeout=30,headers={"Referer":"https://www.iskur.gov.tr/"})
+                    pdf_response.raise_for_status()
+                    reader=PdfReader(BytesIO(pdf_response.content))
+                    full_text=tx(" ".join(page.extract_text() or "" for page in reader.pages))[:12000]
+                    if not full_text:
+                        raise RuntimeError("İŞKUR PDF metni boş veya taranmış görüntü.")
+                    if re.search(r"ön\s*lisans[^.]{0,500}\badalet\b|\badalet\b[^.]{0,500}ön\s*lisans",full_text,re.I):
+                        education="Ön lisans: Adalet ve ilanda belirtilen diğer programlar"
+                    score_match=re.search(r"KPSS\s*(?:\(B\)\s*)?P(93|94|3)\b",full_text,re.I)
+                    score_type=("P"+score_match.group(1)) if score_match else None
+                    min_match=re.search(r"(?:en\s+az|asgari)\s*(\d{2,3})\s*(?:puan)?",full_text,re.I)
+                    minimum_score=int(min_match.group(1)) if min_match else None
+                    count_match=re.search(r"\b(\d{1,3})\s+adet\b",full_text,re.I)
+                    position_count=int(count_match.group(1)) if count_match else None
+                    date_matches=re.findall(r"\b(\d{1,2}[./-]\d{1,2}[./-]\d{4})\b",full_text)
+                    if date_matches:
+                        start_date=date(date_matches[0])
+                except Exception as exc:
+                    print(f"İŞKUR PDF ayrıntısı alınamadı: {detail}: {str(exc)[:180]}",file=sys.stderr)
+            is_open=bool(end_date and end_date>=local_today() and (not start_date or start_date<=local_today()))
             out.append(item("iskur-kamu-memur",eid,title,"İŞKUR Kamu Memur Alım İlanları",detail,
-                row_text,category="Memur",city="İstanbul",endDate=end_date))
+                full_text,category="Memur",city="İstanbul",education=education,scoreType=score_type,
+                minimumScore=minimum_score,positionCount=position_count,startDate=start_date,
+                endDate=end_date,status="open" if is_open else "check_required"))
         if not out:
             body=tx(soup.get_text(" ",strip=True))
             if "İstanbul iline ait İlanlar" not in body and "Kamu Memur Alım İlanları" not in body:
