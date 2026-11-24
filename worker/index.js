@@ -543,11 +543,34 @@ async function syncOneSource(source, env) {
 }
 
 async function syncConfiguredSources(env) {
-  const result = await env.DB.prepare(`SELECT id, name, homepage_url, feed_url, feed_type, adapter, enabled FROM sources WHERE enabled=1`).all();
+  const result = await env.DB.prepare(\`SELECT id, name, homepage_url, feed_url, feed_type, adapter, enabled, last_checked_at FROM sources WHERE enabled=1\`).all();
   const sources = result.results || [];
   const outcomes = [];
-  // Keep concurrency low to avoid stressing public endpoints.
-  for (const source of sources) outcomes.push(await syncOneSource(source, env));
+  const minIntervals = {
+    'kariyer-kapisi': 30 * 60 * 1000,
+    'osym': 60 * 60 * 1000,
+    'ilan-gov': 60 * 60 * 1000,
+    'kamuilan-sbb': 60 * 60 * 1000,
+    'resmi-gazete': 24 * 60 * 60 * 1000,
+    'iskur': 60 * 60 * 1000
+  };
+  const now = Date.now();
+  // Check sources one at a time and respect per-source minimum polling intervals.
+  for (const source of sources) {
+    const lastChecked = source.last_checked_at ? Date.parse(source.last_checked_at) : NaN;
+    const minInterval = minIntervals[source.id] || 60 * 60 * 1000;
+    if (Number.isFinite(lastChecked) && now - lastChecked < minInterval) {
+      outcomes.push({
+        source: source.name,
+        status: source.status,
+        imported: 0,
+        skipped: true,
+        message: 'Kaynağın kontrol aralığı dolmadı; gereksiz istek gönderilmedi.'
+      });
+      continue;
+    }
+    outcomes.push(await syncOneSource(source, env));
+  }
   return outcomes;
 }
 
