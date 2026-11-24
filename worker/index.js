@@ -1,10 +1,11 @@
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const ALLOWED_METHODS = 'GET, POST, OPTIONS';
+const ALLOWED_ORIGIN = 'https://patarakutere.github.io';
 
 function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...JSON_HEADERS, 'access-control-allow-origin': '*', 'access-control-allow-methods': ALLOWED_METHODS, 'access-control-allow-headers': 'content-type,x-admin-token', ...extraHeaders }
+    headers: { ...JSON_HEADERS, 'access-control-allow-origin': ALLOWED_ORIGIN, 'access-control-allow-methods': ALLOWED_METHODS, 'access-control-allow-headers': 'content-type,x-admin-token', 'vary': 'Origin', ...extraHeaders }
   });
 }
 
@@ -153,6 +154,10 @@ function normalizeIngestItem(item, source) {
     title,
     institution: institution || source.name,
     summary: safeText(item.summary, 12000),
+    departments: Array.isArray(item.departments) ? [...new Set(item.departments.map(value => safeText(value, 100)).filter(Boolean))].slice(0, 80) : (new RegExp('\\badalet\\b','i').test(String(item.summary || '')) ? ['Adalet'] : []),
+    employmentType: safeText(item.employmentType || (/sözleşmeli|4.b/i.test(item.title + ' ' + item.category) ? 'Sözleşmeli personel' : /işçi/i.test(item.title + ' ' + item.category) ? 'İşçi' : /memur|zabıta|itfaiye/i.test(item.title + ' ' + item.category) ? 'Memur' : ''), 100),
+    institutionType: safeText(item.institutionType || (/belediye|büyükşehir/i.test(item.institution + ' ' + item.title) ? 'Belediye' : /üniversite|rektörlük/i.test(item.institution + ' ' + item.title) ? 'Üniversite' : /bakanlık|başkanlık|genel müdürlük/i.test(item.institution + ' ' + item.title) ? 'Bakanlık / Başkanlık' : 'Diğer kamu kurumu'), 100),
+    announcementType: safeText(item.announcementType || (/kpss.*(tercih|yerleştirme)|merkezi yerleştirme/i.test(item.title) ? 'KPSS tercih / yerleştirme' : /duyuru|sonuç|takvim/i.test(item.title) && !/alım/i.test(item.title) ? 'Duyuru' : /alım|alim|personel|memur|işçi|zabıta/i.test(item.title) ? 'Personel alımı' : 'Diğer ilan'), 100),
     category: safeText(item.category || 'Kamu ilanı', 100),
     city: safeText(item.city, 100),
     education: safeText(item.education, 200),
@@ -166,6 +171,16 @@ function normalizeIngestItem(item, source) {
     status,
     positionCount
   };
+}
+
+async function isRateLimited(env, request, name, maxHits = 3, windowMs = 600000) {
+  const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+  const bucket = name + ':' + ip;
+  const now = Date.now(); const cutoff = now - windowMs;
+  try {
+    const row = await env.DB.prepare(`INSERT INTO api_rate_limits (bucket,hits,window_started_at) VALUES (?,1,?) ON CONFLICT(bucket) DO UPDATE SET hits=CASE WHEN window_started_at<=? THEN 1 ELSE hits+1 END, window_started_at=CASE WHEN window_started_at<=? THEN excluded.window_started_at ELSE window_started_at END RETURNING hits`).bind(bucket,now,cutoff,cutoff).first();
+    return Number(row?.hits || 0) > maxHits;
+  } catch { return true; }
 }
 
 async function ingestBatch(request, env) {
@@ -219,14 +234,14 @@ async function ingestBatch(request, env) {
         title=?, institution=?, summary=?, category=?, city=?, education=?, score_type=?,
         minimum_score=?, published_at=?, start_date=?, end_date=?, detail_url=?, source_name=?,
         status=?, content_hash=?, last_verified_at=?, dedupe_hash=COALESCE(?, dedupe_hash),
-        publication_state=?, position_count=?, updated_at=CURRENT_TIMESTAMP
+        publication_state=?, position_count=?, departments_json=?, employment_type=?, institution_type=?, announcement_type=?, updated_at=CURRENT_TIMESTAMP
         WHERE id=?`)
         .bind(item.title, item.institution, item.summary || null, item.category, item.city || null,
           item.education || null, item.scoreType || null, item.minimumScore, item.publishedAt || null,
           item.startDate, item.endDate, item.detailUrl, sourceResult.name, item.status,
           await hashText(JSON.stringify(item)), now, dedupeHash,
           item.status === 'open' ? 'published' : item.status === 'closed' ? 'expired' : 'draft',
-          item.positionCount, existingSourceItem.id).run();
+          item.positionCount, JSON.stringify(item.departments), item.employmentType, item.institutionType, item.announcementType, existingSourceItem.id).run();
       imported++;
       continue;
     }
@@ -254,8 +269,8 @@ async function ingestBatch(request, env) {
         id, source_id, external_id, title, institution, summary, category, city, education,
         score_type, minimum_score, published_at, start_date, end_date, detail_url, source_name,
         status, content_hash, last_verified_at, dedupe_hash, source_refs, publication_state,
-        position_count, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        position_count, departments_json, employment_type, institution_type, announcement_type, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(source_id, external_id) DO UPDATE SET
         title=excluded.title, institution=excluded.institution, summary=excluded.summary,
         category=excluded.category, city=excluded.city, education=excluded.education,
@@ -265,14 +280,16 @@ async function ingestBatch(request, env) {
         content_hash=excluded.content_hash, last_verified_at=excluded.last_verified_at,
         dedupe_hash=COALESCE(excluded.dedupe_hash, announcements.dedupe_hash),
         source_refs=excluded.source_refs, publication_state=excluded.publication_state,
-        position_count=excluded.position_count, updated_at=CURRENT_TIMESTAMP
+        position_count=excluded.position_count, departments_json=excluded.departments_json,
+        employment_type=excluded.employment_type, institution_type=excluded.institution_type,
+        announcement_type=excluded.announcement_type, updated_at=CURRENT_TIMESTAMP
     `).bind(
       id, sourceId, item.externalId, item.title, item.institution, item.summary || null,
       item.category, item.city || null, item.education || null, item.scoreType || null,
       item.minimumScore, item.publishedAt || null, item.startDate, item.endDate,
       item.detailUrl, sourceResult.name, item.status, await hashText(JSON.stringify(item)),
       now, dedupeHash, refs, item.status === 'open' ? 'published' : item.status === 'closed' ? 'expired' : 'draft',
-      item.positionCount
+      item.positionCount, JSON.stringify(item.departments), item.employmentType, item.institutionType, item.announcementType
     ).run();
     imported++;
   }
@@ -290,7 +307,8 @@ async function getSources(env) {
     s.backoff_until AS backoffUntil, s.enabled,
     (SELECT COUNT(*) FROM source_checks c WHERE c.source_id=s.id AND c.checked_at >= datetime('now','-1 day')) AS checks24h,
     (SELECT COUNT(*) FROM source_checks c WHERE c.source_id=s.id AND c.status='success' AND c.checked_at >= datetime('now','-1 day')) AS successes24h,
-    (SELECT MAX(c.checked_at) FROM source_checks c WHERE c.source_id=s.id AND c.status='success') AS lastSuccessAt
+    (SELECT MAX(c.checked_at) FROM source_checks c WHERE c.source_id=s.id AND c.status='success') AS lastSuccessAt,
+    (SELECT c.item_count FROM source_checks c WHERE c.source_id=s.id ORDER BY c.checked_at DESC LIMIT 1) AS latestItemCount
     FROM sources s ORDER BY s.name`).all();
   return (result.results || []).map(source => ({
     ...source,
@@ -308,7 +326,7 @@ async function getListings(request, env) {
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 500), 1), 500);
 
   const today = turkeyToday();
-  let sql = `SELECT id, title, institution, summary, category, city, education, score_type AS scoreType, minimum_score AS minimumScore, published_at AS publishedAt, start_date AS startDate, end_date AS endDate, detail_url AS url, source_name AS sourceName, status, source_refs AS sourceRefs, publication_state AS publicationState, position_count AS positionCount FROM announcements WHERE status IN ('open','check_required') AND publication_state NOT IN ('expired','invalid') AND (end_date IS NULL OR end_date >= ?)`;
+  let sql = `SELECT id, title, institution, summary, category, city, education, score_type AS scoreType, minimum_score AS minimumScore, published_at AS publishedAt, start_date AS startDate, end_date AS endDate, detail_url AS url, source_name AS sourceName, status, source_refs AS sourceRefs, publication_state AS publicationState, position_count AS positionCount, departments_json AS departmentsJson, employment_type AS employmentType, institution_type AS institutionType, announcement_type AS announcementType FROM announcements WHERE status IN ('open','check_required') AND publication_state NOT IN ('expired','invalid') AND (end_date IS NULL OR end_date >= ?)`;
   const params = [today];
   if (q) { sql += ` AND (title LIKE ? OR institution LIKE ? OR summary LIKE ?)`; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
   if (city) { sql += ` AND (city = ? OR city = 'Türkiye Geneli')`; params.push(city); }
@@ -318,7 +336,12 @@ async function getListings(request, env) {
   sql += ` ORDER BY COALESCE(published_at, created_at) DESC LIMIT ?`;
   params.push(limit);
   const rows = await env.DB.prepare(sql).bind(...params).all();
-  return rows.results || [];
+  return (rows.results || []).map(row => {
+    let departments = [];
+    try { departments = JSON.parse(row.departmentsJson || '[]'); } catch {}
+    delete row.departmentsJson;
+    return { ...row, departments: Array.isArray(departments) ? departments : [] };
+  });
 }
 
 function parseOsymKpssPage(html, source) {
@@ -1031,7 +1054,9 @@ async function syncConfiguredSources(env) {
 export default {
   async fetch(request, env, ctx) {
     if (!env.DB) return json({ error: 'D1 veritabanı bağlantısı yapılandırılmamış.' }, 503);
-    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': ALLOWED_METHODS, 'access-control-allow-headers': 'content-type,x-admin-token' } });
+    const origin = request.headers.get('Origin');
+    if (origin && origin !== ALLOWED_ORIGIN) return json({ error: 'Bu alan adından API erişimine izin verilmiyor.' }, 403);
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'access-control-allow-origin': ALLOWED_ORIGIN, 'access-control-allow-methods': ALLOWED_METHODS, 'access-control-allow-headers': 'content-type,x-admin-token', 'vary': 'Origin' } });
     const url = new URL(request.url);
     try {
       if (request.method === 'POST' && url.pathname === '/api/ingest') return await ingestBatch(request, env);
@@ -1045,7 +1070,12 @@ export default {
         const [listings, sources] = await Promise.all([getListings(request, env), getSources(env)]);
         return json({ listings, sources, updatedAt: new Date().toISOString() });
       }
-      if (request.method === 'POST' && (url.pathname === '/api/sync-now' || url.pathname === '/api/admin/sync')) {
+      if (request.method === 'POST' && url.pathname === '/api/admin/sync') {
+        if (!env.ADMIN_TOKEN || request.headers.get('x-admin-token') !== env.ADMIN_TOKEN) return json({ error: 'Yetkisiz işlem.' }, 401);
+        return json({ error: 'Kaynak taraması GitHub Actions tarafından yürütülür. Actions ekranından workflow_dispatch başlatın.' }, 410);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/sync-now') {
+        if (await isRateLimited(env, request, 'sync-now', 3, 600000)) return json({ error: 'Çok sık istek gönderildi. 10 dakika sonra tekrar dene.' }, 429, { 'retry-after': '600' });
         return json({ error: 'Kaynak taraması GitHub Actions tarafından yürütülür. Actions ekranından workflow_dispatch başlatın.' }, 410);
       }
       return json({ error: 'Bulunamadı.' }, 404);
