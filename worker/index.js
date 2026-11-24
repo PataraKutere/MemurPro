@@ -207,6 +207,24 @@ async function ingestBatch(request, env) {
     const dedupeHash = item.endDate ? await hashText(dedupeInput) : null;
     const id = sourceId + '-' + (await hashText(item.externalId)).slice(0, 24);
     const sourceRef = { sourceId, sourceName: sourceResult.name, url: item.detailUrl };
+    const existingSourceItem = await env.DB.prepare('SELECT id FROM announcements WHERE source_id=? AND external_id=?').bind(sourceId, item.externalId).first();
+    if (existingSourceItem) {
+      await env.DB.prepare(`UPDATE announcements SET
+        title=?, institution=?, summary=?, category=?, city=?, education=?, score_type=?,
+        minimum_score=?, published_at=?, start_date=?, end_date=?, detail_url=?, source_name=?,
+        status=?, content_hash=?, last_verified_at=?, dedupe_hash=COALESCE(?, dedupe_hash),
+        publication_state=?, position_count=?, updated_at=CURRENT_TIMESTAMP
+        WHERE id=?`)
+        .bind(item.title, item.institution, item.summary || null, item.category, item.city || null,
+          item.education || null, item.scoreType || null, item.minimumScore, item.publishedAt || null,
+          item.startDate, item.endDate, item.detailUrl, sourceResult.name, item.status,
+          await hashText(JSON.stringify(item)), now, dedupeHash,
+          item.status === 'open' ? 'published' : item.status === 'closed' ? 'expired' : 'draft',
+          item.positionCount, existingSourceItem.id).run();
+      imported++;
+      continue;
+    }
+
     const existing = dedupeHash
       ? await env.DB.prepare('SELECT id, source_refs, source_name FROM announcements WHERE dedupe_hash=? LIMIT 1').bind(dedupeHash).first()
       : null;
