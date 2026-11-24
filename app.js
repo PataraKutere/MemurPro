@@ -746,9 +746,9 @@ function renderSourceStatuses(sources) {
     stateEl.className = `source-state ${source.status || 'pending'}`;
     const detailEl = $('.source-copy small', row);
     const details = [];
-    if (source.lastError) details.push(source.lastError);
-    else if (source.checkedAt) details.push(`Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`);
-    if (source.latestItemCount !== null && source.latestItemCount !== undefined) details.push(`Son kontrolde ${source.latestItemCount} ilan`);
+    if (source.checkedAt) details.push(`Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`);
+    if (source.lastError) details.push(`Son hata: ${source.lastError}`);
+    if (source.latestItemCount !== null && source.latestItemCount !== undefined) details.push(`Son başarılı kontrolde ${source.latestItemCount} ilan`);
     else details.push('İlk başarılı veri aktarımı bekleniyor.');
     if (source.lastSuccessAt) details.push(`Son başarılı: ${new Date(source.lastSuccessAt).toLocaleString('tr-TR')}`);
     if (source.successRate24h !== null && source.successRate24h !== undefined) details.push(`24 saat başarı: ${source.successRate24h}% (${source.successes24h}/${source.checks24h})`);
