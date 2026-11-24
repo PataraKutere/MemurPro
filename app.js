@@ -169,8 +169,8 @@ function updateSourceFilter() {
   });
   const counts = new Map();
   state.listings.forEach(item => {
-    const name = String(item.sourceName || '');
-    if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    const sourceNames = String(item.sourceName || '').split(' · ').map(name => name.trim()).filter(Boolean);
+    for (const name of new Set(sourceNames)) counts.set(name, (counts.get(name) || 0) + 1);
   });
   const options = [...names.entries()].sort((a,b) => a[0].localeCompare(b[0], 'tr'));
   select.innerHTML = '<option value="">Tüm kaynaklar</option>' + options.map(([name, source]) => {
@@ -197,7 +197,10 @@ function applyFilters(listings) {
     if (f.education && item.education !== f.education) return false;
     if (f.score && item.scoreType !== f.score) return false;
     if (f.type && item.category !== f.type) return false;
-    if (f.source && String(item.sourceName || '').toLocaleLowerCase('tr-TR') !== f.source.toLocaleLowerCase('tr-TR')) return false;
+    if (f.source) {
+      const itemSources = String(item.sourceName || '').split(' · ').map(name => name.trim().toLocaleLowerCase('tr-TR'));
+      if (!itemSources.includes(f.source.toLocaleLowerCase('tr-TR'))) return false;
+    }
     return true;
   });
 }
