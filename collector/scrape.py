@@ -10,7 +10,7 @@ TOKEN=os.environ.get("MEMURPRO_INGEST_TOKEN","")
 S=requests.Session()
 S.headers.update({"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36","Accept-Language":"tr-TR,tr;q=0.9"})
 RE=re.compile(r"personel\s+al[ıi]m|memur\s+al[ıi]m|sözleşmeli\s+personel|işçi\s+al[ıi]m|öğretim\s+(?:üyesi|elemanı|görevlisi)\s+al[ıi]m|uzman\s+yardımcısı|müfettiş\s+yardımcısı|zabıta\s+memuru|itfaiye\s+eri",re.I)
-BAD=re.compile(r"\b(sonuç|yerleştirilen|kazanan|iptal|düzeltme|duyuru sonucu)\b",re.I)
+BAD=re.compile(r"\b(sonuç|yerleştirilen|kazanan|iptal|düzeltme|duyuru sonucu|cevap anahtarı|cevap kâğıdı|aday cevapları|kura sonucu|atama sonucu)\b",re.I)
 
 def tx(v): return re.sub(r"\s+"," ",BeautifulSoup(str(v or ""),"html.parser").get_text(" ",strip=True)).strip()
 def decode(r):
@@ -61,22 +61,38 @@ def kariyer_rows(payload):
           startDate=start,endDate=end,status="open" if opened else "check_required"))
     return out
 def scrape_kariyer(browser):
-    p=browser.new_page(); captured=[]
+    p=browser.new_page(); captured=[]; api_urls=[]
+    def on_request(req):
+        if req.resource_type in ("xhr","fetch") and "/api/" in req.url:
+            api_urls.append(req.url)
     def on_response(resp):
-        if "GetIseAlimPage" in resp.url:
+        if "/api/" in resp.url:
             try:
                 data=resp.json()
-                if isinstance(data,dict) and isinstance(data.get("searchIlan"),list): captured.append(data)
+                if isinstance(data,dict) and isinstance(data.get("searchIlan"),list):
+                    captured.append(data)
             except Exception: pass
-    p.on("response",on_response)
+    p.on("request",on_request); p.on("response",on_response)
     try:
-        p.goto("https://kariyerkapisi.gov.tr/isealim",wait_until="domcontentloaded",timeout=25000); p.wait_for_timeout(3500)
-        if captured: return kariyer_rows(max(captured,key=lambda x:len(x.get("searchIlan",[]))))
+        try:
+            p.goto("https://kariyerkapisi.gov.tr/isealim",wait_until="domcontentloaded",timeout=15000)
+            p.wait_for_timeout(1800)
+        except Exception as exc:
+            print("Kariyer sayfa açılışı:",str(exc)[:180],file=sys.stderr)
+        if captured:
+            return kariyer_rows(max(captured,key=lambda x:len(x.get("searchIlan",[]))))
         resp=p.request.post("https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage",
           data={"krM_ID":0,"searchText":"","il":"0","ilanTuru":"0"},
-          headers={"Referer":"https://kariyerkapisi.gov.tr/isealim","Origin":"https://kariyerkapisi.gov.tr"},timeout=12000)
+          headers={"Referer":"https://kariyerkapisi.gov.tr/isealim","Origin":"https://kariyerkapisi.gov.tr"},
+          timeout=20000)
         if not resp.ok: raise RuntimeError(f"Kariyer API HTTP {resp.status}")
-        return kariyer_rows(resp.json())
+        payload=resp.json()
+        if not isinstance(payload,dict) or not isinstance(payload.get("searchIlan"),list):
+            raise RuntimeError("Kariyer API searchIlan listesi döndürmedi.")
+        return kariyer_rows(payload)
+    except Exception as exc:
+        hints=", ".join(dict.fromkeys(api_urls[-6:]))
+        raise RuntimeError(f"{exc}; sayfada görülen XHR: {hints or 'GetIseAlimPage isteği görülmedi'}")
     finally: p.close()
 
 def scrape_resmi():
@@ -84,32 +100,32 @@ def scrape_resmi():
     for off in range(3):
         d=now.date()-timedelta(days=off); key=d.strftime("%Y%m%d"); index=f"https://www.resmigazete.gov.tr/fihrist?tarih={d.isoformat()}"
         try:
-            r=S.get(index,timeout=12); r.raise_for_status(); soup=BeautifulSoup(decode(r),"html.parser")
+            r=S.get(index,timeout=12,headers={"Referer":"https://www.resmigazete.gov.tr/"}); r.raise_for_status()
+            soup=BeautifulSoup(decode(r),"html.parser")
             a=next((a for a in soup.find_all("a",href=True) if re.search(r"çeşitli\s+il[âa]nlar",tx(a),re.I)),None)
-            if a:
-                u=urljoin(index,a["href"]); page=S.get(u,timeout=12); page.raise_for_status(); html=decode(page)
-                if not re.search(r"çeşitli\s+il[âa]nlar",tx(html),re.I): raise RuntimeError("Fihrist bağlantısı Çeşitli İlanlar içeriğini vermedi")
-                read_ok=True; ps=BeautifulSoup(html,"html.parser")
-            else:
-                u=f"https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/{d.year}/{d.month:02d}/{key}-4.htm"
-                page=S.get(u,timeout=12)
-                if not page.ok: continue
-                html=decode(page)
-                if not re.search(r"çeşitli\s+il[âa]nlar",tx(html),re.I): continue
-                read_ok=True; ps=BeautifulSoup(html,"html.parser")
-            for a in ps.find_all("a",href=True):
-                title=tx(a); href=urljoin(u,a["href"])
-                if urlparse(href).hostname not in ("www.resmigazete.gov.tr","resmigazete.gov.tr"): continue
-                context=tx(a.parent.parent if a.parent and a.parent.parent else a.parent)
-                if not RE.search(title+" "+context) or BAD.search(title): continue
-                inst="Resmî Gazete"
-                m=re.search(r"([A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü0-9 .,'’()-]{3,130}?(?:Bakanlığı|Genel Müdürlüğü|Başkanlığı|Üniversitesi|Belediyesi))",context)
-                if m: inst=m.group(1)
-                out.append(item("resmi-gazete",href,title or context[:250],inst,href,"Resmî Gazete Çeşitli İlânlar bölümü; başvuru şartları resmî belgeyle doğrulanmalı.",category="Memur",publishedAt=f"{d.year}-{d.month:02d}-{d.day:02d}"))
-            if out: break
+            candidates=[]
+            if a: candidates.append(urljoin(index,a["href"]))
+            direct=f"https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/{d.year}/{d.month:02d}/{key}-4.htm"
+            if direct not in candidates: candidates.append(direct)
+            for u in candidates:
+                page=S.get(u,timeout=12,headers={"Referer":index}); 
+                if not page.ok: errors.append(f"{d}: HTTP {page.status}"); continue
+                html=decode(page); body=tx(html)
+                has_section=bool(re.search(r"çeşitli\s+il[âa]nlar",body,re.I))
+                has_recruitment=bool(RE.search(body))
+                if not has_section and not has_recruitment:
+                    errors.append(f"{d}: bölüm başlığı/içerik doğrulanamadı")
+                    continue
+                read_ok=True
+                found=parse_resmi(html,key,u)
+                out.extend(found)
+                break
+            if read_ok: break
         except Exception as e:
-            errors.append(f"{d}: {e}"); print(f"Resmî Gazete {d}: {e}",file=sys.stderr)
-    if not read_ok: raise RuntimeError("Resmî Gazete Çeşitli İlânlar sayfası okunamadı. "+"; ".join(errors[-2:])[:250])
+            errors.append(f"{d}: {e}")
+            print(f"Resmî Gazete {d}: {e}",file=sys.stderr)
+    if not read_ok:
+        raise RuntimeError("Resmî Gazete son 3 günün Çeşitli İlânlar içeriği okunamadı. "+"; ".join(errors[-3:])[:250])
     return out[:100]
 
 def scrape_osym():
@@ -121,22 +137,53 @@ def scrape_osym():
         seen.add(href); out.append(item("osym",href,title,"ÖSYM",href,"ÖSYM KPSS duyurusu; resmî duyuruyu inceleyin.",category="KPSS"))
     return out[:100]
 
-def scrape_ilan():
-    endpoint="https://www.ilan.gov.tr/api/api/services/app/Ad/AdsByFilter"; out=[]; seen=set()
-    for skip in (0,20,40):
-        r=S.post(endpoint,json={"keys":{"txv":[8],"ats":[5],"order":["desc"],"field":["publish_time"]},"sorting":"publish_time desc","skipCount":skip,"maxResultCount":20},
-          headers={"Content-Type":"application/json-patch+json","Origin":"https://www.ilan.gov.tr","Referer":"https://www.ilan.gov.tr/ilan/kategori/8/kamu-akademik-personel?ats=5","X-Request-Origin":"IGT-UI","X-Requested-With":"XMLHttpRequest"},timeout=15)
-        r.raise_for_status(); ads=r.json().get("result",{}).get("ads")
-        if not isinstance(ads,list): raise RuntimeError("result.ads listesi bulunamadı")
-        for x in ads:
-            aid=x.get("id") or x.get("idInt") or x.get("adNo"); title=x.get("title")
-            if not aid or not title or str(aid) in seen: continue
-            seen.add(str(aid)); u=urljoin("https://www.ilan.gov.tr/",x.get("urlStr") or f"ilan/{aid}")
-            summary=" · ".join(f"{v.get('key')}: {v.get('value')}" for v in (x.get("adTypeFilters") or []) if v.get("key") and v.get("value"))
-            out.append(item("ilan-gov","ilan-gov-"+str(aid),title,x.get("advertiserName") or "Kamu / akademik kurum",u,summary,category="Akademik Personel",city=x.get("addressCityName"),publishedAt=x.get("publishStartDate")))
-        if len(ads)<20: break
-        time.sleep(.3)
+def parse_ilan_payload(payload):
+    ads=payload.get("result",{}).get("ads") if isinstance(payload,dict) else None
+    if not isinstance(ads,list): raise RuntimeError("İlan.gov.tr result.ads listesi bulunamadı")
+    out=[]
+    for x in ads:
+        aid=x.get("id") or x.get("idInt") or x.get("adNo"); title=x.get("title")
+        if not aid or not title: continue
+        u=urljoin("https://www.ilan.gov.tr/",x.get("urlStr") or f"ilan/{aid}")
+        summary=" · ".join(f"{v.get('key')}: {v.get('value')}" for v in (x.get("adTypeFilters") or []) if v.get("key") and v.get("value"))
+        out.append(item("ilan-gov","ilan-gov-"+str(aid),title,x.get("advertiserName") or "Kamu / akademik kurum",u,summary,
+            category="Akademik Personel",city=x.get("addressCityName"),publishedAt=x.get("publishStartDate")))
     return out
+
+def scrape_ilan(browser):
+    p=browser.new_page(); captured=[]
+    endpoint="/api/api/services/app/Ad/AdsByFilter"
+    def on_response(resp):
+        if endpoint in resp.url:
+            try:
+                data=resp.json()
+                if isinstance(data,dict) and isinstance(data.get("result",{}).get("ads"),list): captured.append(data)
+            except Exception: pass
+    p.on("response",on_response)
+    try:
+        response=p.goto("https://www.ilan.gov.tr/ilan/kategori/8/kamu-akademik-personel?ats=5",wait_until="domcontentloaded",timeout=20000)
+        if response and response.status>=400: raise RuntimeError(f"İlan.gov.tr sayfası HTTP {response.status}")
+        p.wait_for_timeout(1200)
+        pages=list(captured)
+        if not pages:
+            for skip in (0,20,40):
+                payload=p.evaluate("""async (skip) => {
+                  const body={keys:{txv:[8],ats:[5],order:['desc'],field:['publish_time']},sorting:'publish_time desc',skipCount:skip,maxResultCount:20};
+                  const r=await fetch('/api/api/services/app/Ad/AdsByFilter',{method:'POST',headers:{'content-type':'application/json-patch+json','accept':'application/json, text/plain, */*','x-request-origin':'IGT-UI','x-requested-with':'XMLHttpRequest'},body:JSON.stringify(body)});
+                  if(!r.ok) return {__httpStatus:r.status};
+                  return await r.json();
+                }""",skip)
+                if payload.get("__httpStatus"): raise RuntimeError(f"İlan.gov.tr API HTTP {payload['__httpStatus']}")
+                pages.append(payload)
+                ads=payload.get("result",{}).get("ads",[])
+                if len(ads)<20: break
+                time.sleep(.25)
+        out=[]; seen=set()
+        for payload in pages:
+            for x in parse_ilan_payload(payload):
+                if x["externalId"] not in seen: seen.add(x["externalId"]); out.append(x)
+        return out
+    finally: p.close()
 
 def scrape_iskur(browser):
     p=browser.new_page()
@@ -206,7 +253,12 @@ def main():
                     result=report(sid,items); results.append({"source":sid,**result})
                     print(f"OK {sid}: {result.get('imported',0)}")
                 except Exception as e:
-                    msg=f"{type(e).__name__}: {e}"[:450]; print("ERROR",sid,msg,file=sys.stderr)
+                    msg=f"{type(e).__name__}: {e}"[:450]
+                    if sid=="iskur" and "oturumsuz" in msg.lower():
+                        results.append({"source":sid,"status":"pending","skipped":True,"message":msg})
+                        print("SKIP",sid,msg,file=sys.stderr)
+                        continue
+                    print("ERROR",sid,msg,file=sys.stderr)
                     try:
                         failed_report=report(sid,error=msg) if not dry else {"status":"failed"}
                         results.append({"source":sid,**failed_report,"error":msg})
