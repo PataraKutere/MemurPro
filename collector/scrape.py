@@ -493,14 +493,17 @@ def scrape_iskur_memur(browser):
                     departments=[name for pattern,name in department_patterns if re.search(pattern,full_text,re.I)]
                     if "Adalet" in departments and re.search(r"ön\s*lisans",full_text,re.I):
                         education="Ön lisans: "+", ".join(departments)+" ve ilanda belirtilen diğer programlar"
-                    department_row=re.search(r"\b\d+\s+Zabıta\s+Memuru\s+GİH\s+\d+\s+(\d{1,3})\s*-\s*[^.]{0,500}\badalet\b[^.]{0,300}",full_text,re.I)
+                    department_row=None
+                    for row_match in re.finditer(r"\b\d+\s+Zabıta\s+Memuru\s+GİH\s+\d+\s+(\d{1,3})\s*-\s*([\s\S]{0,1200}?)(?=\s+\d+\s+Zabıta\s+Memuru|\s+BAŞVURU\s+GENEL|$)",full_text,re.I):
+                        if re.search(r"\badalet\b",row_match.group(2),re.I):
+                            department_row=row_match
+                            position_count=int(row_match.group(1))
+                            break
                     score_context=department_row.group(0) if department_row else full_text
                     score_match=re.search(r"\bP\s*(93|94|3)\b",score_context,re.I)
                     score_type=("P"+score_match.group(1)) if score_match else None
                     min_match=re.search(r"(?:en\s+az|asgari)\s*(\d{2,3})\s*(?:puan)?",score_context,re.I)
                     minimum_score=int(min_match.group(1)) if min_match else None
-                    if department_row:
-                        position_count=int(department_row.group(1))
                     application_section=re.search(r"BAŞVURU\s+YERİ.{0,80}?TARİHİ.{0,80}?SÜRESİ\s*:?([\s\S]{0,1800}?)(?=BAŞVURULARIN\s+DEĞERLENDİRİLMESİ|SINAVIN\s+YERİ|$)",full_text,re.I)
                     date_matches=re.findall(r"\b(\d{1,2}[./-]\d{1,2}[./-]\d{4})\b",application_section.group(1) if application_section else "")
                     if date_matches:
