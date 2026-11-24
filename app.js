@@ -2,7 +2,8 @@
 
 const STORAGE_KEYS = {
   saved: 'memurpro.saved.v1',
-  profile: 'memurpro.profile.v1'
+  profile: 'memurpro.profile.v1',
+  tracking: 'memurpro.tracking.v1'
 };
 
 const state = {
@@ -10,6 +11,7 @@ const state = {
   listings: [],
   saved: readJSON(STORAGE_KEYS.saved, []),
   profile: readJSON(STORAGE_KEYS.profile, null),
+  tracking: readJSON(STORAGE_KEYS.tracking, {}),
   filters: { q: '', city: '', education: '', score: '', type: '' }
 };
 
@@ -64,6 +66,8 @@ function isSaved(id) {
 function toggleSaved(listing) {
   if (isSaved(listing.id)) {
     state.saved = state.saved.filter(item => item.id !== listing.id);
+    delete state.tracking[listing.id];
+    localStorage.setItem(STORAGE_KEYS.tracking, JSON.stringify(state.tracking));
     showToast('İlan takip listenden çıkarıldı.');
   } else {
     state.saved.push(listing);
@@ -197,13 +201,73 @@ function renderMatchedListings() {
   }).join('');
 }
 
+const APPLICATION_STATUSES = [
+  ['review', 'İncelenecek'],
+  ['documents', 'Evrak hazırlanıyor'],
+  ['applied', 'Başvuruldu'],
+  ['waiting', 'Sonuç bekleniyor'],
+  ['positive', 'Olumlu'],
+  ['negative', 'Olumsuz']
+];
+
+function getTracking(id) {
+  return state.tracking[id] || { status: 'review', deadline: '' };
+}
+
+function saveTracking(id, patch) {
+  state.tracking[id] = { ...getTracking(id), ...patch, updatedAt: new Date().toISOString() };
+  localStorage.setItem(STORAGE_KEYS.tracking, JSON.stringify(state.tracking));
+}
+
+function deadlineLabel(value) {
+  if (!value) return 'Son başvuru tarihi girilmedi';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return 'Geçersiz tarih';
+  const left = daysBetween(new Date(), date);
+  if (left < 0) return `Son tarih ${Math.abs(left)} gün geçti`;
+  if (left === 0) return 'Son başvuru bugün';
+  return `${left} gün kaldı`;
+}
+
 function renderSaved() {
   const container = $('#savedResults');
   if (!state.saved.length) {
     container.innerHTML = `<div class="listing-placeholder"><div class="empty-icon">☆</div><strong>Henüz takip ettiğin ilan yok</strong><p>İlanlar bölümünde bir ilanı yıldızlayarak buraya ekleyebilirsin. Kayıtların bu tarayıcıda saklanır.</p><button class="button button-outline" data-go="listings">İlanları keşfet</button></div>`;
     return;
   }
-  container.innerHTML = state.saved.map(listingCard).join('');
+  const ordered = [...state.saved].sort((a, b) => {
+    const da = getTracking(a.id).deadline || a.endDate || '9999-12-31';
+    const db = getTracking(b.id).deadline || b.endDate || '9999-12-31';
+    return da.localeCompare(db);
+  });
+  const today = new Date(); today.setHours(0,0,0,0);
+  const deadlines = ordered.filter(item => {
+    const value = getTracking(item.id).deadline || item.endDate;
+    return value && !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
+  });
+  const dueSoon = deadlines.filter(item => {
+    const value = getTracking(item.id).deadline || item.endDate;
+    const days = daysBetween(today, new Date(`${value}T00:00:00`));
+    return days >= 0 && days <= 7;
+  }).length;
+  const overdue = deadlines.filter(item => {
+    const value = getTracking(item.id).deadline || item.endDate;
+    return daysBetween(today, new Date(`${value}T00:00:00`)) < 0;
+  }).length;
+  const summary = `<div class="tracking-summary"><span><strong>${state.saved.length}</strong> takip edilen ilan</span><span><strong>${dueSoon}</strong> 7 gün içinde</span><span><strong>${overdue}</strong> tarihi geçen</span></div>`;
+  container.innerHTML = summary + ordered.map(item => {
+    const tracking = getTracking(item.id);
+    const deadline = tracking.deadline || item.endDate || '';
+    const options = APPLICATION_STATUSES.map(([value, label]) => `<option value="${value}" ${tracking.status === value ? 'selected' : ''}>${label}</option>`).join('');
+    const days = deadlineLabel(deadline);
+    const tone = days.includes('geçti') ? ' overdue' : days.includes('bugün') || days.includes('kaldı') ? ' upcoming' : '';
+    const controls = `<div class="application-tracker">
+      <label><span>Başvuru durumu</span><select data-track-status="${escapeHTML(item.id)}">${options}</select></label>
+      <label><span>Son başvuru tarihi</span><input type="date" value="${escapeHTML(deadline)}" data-track-deadline="${escapeHTML(item.id)}"></label>
+      <span class="deadline-countdown${tone}">${escapeHTML(days)}</span>
+    </div>`;
+    return listingCard(item).replace('</article>', `${controls}</article>`);
+  }).join('');
 }
 
 async function loadLiveData() {
@@ -411,6 +475,19 @@ function bindEvents() {
   $('#clearFilters').addEventListener('click', () => {
     ['searchInput','cityFilter','educationFilter','scoreFilter','typeFilter'].forEach(id => { $(`#${id}`).value = ''; });
     bindFilters();
+  });
+  document.addEventListener('change', event => {
+    const statusControl = event.target.closest('[data-track-status]');
+    const deadlineControl = event.target.closest('[data-track-deadline]');
+    if (statusControl) {
+      saveTracking(statusControl.dataset.trackStatus, { status: statusControl.value });
+      showToast('Başvuru durumu kaydedildi.');
+    }
+    if (deadlineControl) {
+      saveTracking(deadlineControl.dataset.trackDeadline, { deadline: deadlineControl.value });
+      renderSaved();
+      showToast('Son başvuru tarihi kaydedildi.');
+    }
   });
   document.addEventListener('click', event => {
     const saveButton = event.target.closest('[data-save-id]');
