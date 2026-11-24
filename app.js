@@ -142,7 +142,8 @@ function listingCard(listing) {
     </div>
     <div class="listing-actions">
       <button class="save-button ${saved ? 'saved' : ''}" data-save-id="${escapeHTML(listing.id)}" aria-label="${saved ? 'Takipten çıkar' : 'Takibe al'}" title="${saved ? 'Takipten çıkar' : 'Takibe al'}">${saved ? '★' : '☆'}</button>
-      ${url ? `<a class="details-button" href="${escapeHTML(url)}" target="_blank" rel="noopener">Resmî ilana git ↗</a>` : ''}
+      <button class="details-button" type="button" data-detail-id="${escapeHTML(listing.id)}">İlan detayları</button>
+      ${url ? `<a class="details-button official-link" href="${escapeHTML(url)}" target="_blank" rel="noopener">Resmî ilana git ↗</a>` : ''}
     </div>
   </article>`;
 }
@@ -526,6 +527,55 @@ async function refreshSources() {
   }
 }
 
+function ensureListingDialog() {
+  let dialog = $('#listingDetailDialog');
+  if (dialog) return dialog;
+  dialog = document.createElement('dialog');
+  dialog.id = 'listingDetailDialog';
+  dialog.className = 'listing-detail-dialog';
+  dialog.setAttribute('aria-labelledby', 'listingDetailTitle');
+  dialog.innerHTML = `<div class="detail-dialog-head">
+    <div><span class="panel-kicker">İLAN BİLGİLERİ</span><h2 id="listingDetailTitle">İlan detayları</h2></div>
+    <button type="button" class="dialog-close" data-close-detail aria-label="Kapat">×</button>
+  </div>
+  <div id="listingDetailContent" class="detail-dialog-content"></div>`;
+  document.body.appendChild(dialog);
+  dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  return dialog;
+}
+
+function openListingDetails(id) {
+  const listing = [...state.listings, ...state.saved].find(item => String(item.id) === String(id));
+  if (!listing) return;
+  const dialog = ensureListingDialog();
+  const start = formatListingDate(listing.startDate);
+  const end = formatListingDate(listing.endDate);
+  const published = formatListingDate(listing.publishedAt);
+  const dateRange = start && end ? `${start} – ${end}` : start ? `${start} – Bitiş tarihi belirtilmemiş` : end ? `Başlangıç belirtilmemiş – ${end}` : 'Başvuru tarih aralığı kaynakta belirtilmemiş';
+  const score = listing.scoreType
+    ? `${listing.scoreType}${listing.minimumScore !== null && listing.minimumScore !== undefined && listing.minimumScore !== '' ? ` · Asgari ${listing.minimumScore} puan` : ' · Asgari puan belirtilmemiş'}`
+    : (/KPSS şartı yok|KPSS aranmıyor/i.test(listing.summary || '') ? 'KPSS şartı aranmadığı belirtilmiş' : 'KPSS şartı / puan bilgisi belirtilmemiş');
+  const url = safeListingUrl(listing.url || listing.detailUrl);
+  const status = listing.status === 'open' ? 'Başvuru açık' : listing.status === 'closed' ? 'Başvuru kapandı' : 'Başvuru durumu resmî kaynaktan kontrol edilmeli';
+  $('#listingDetailTitle').textContent = listing.title || 'İlan detayları';
+  $('#listingDetailContent').innerHTML = `
+    <div class="detail-institution">${escapeHTML(listing.institution || 'Kurum bilgisi belirtilmemiş')} · ${escapeHTML(listing.sourceName || 'Resmî kaynak')}</div>
+    <div class="detail-facts">
+      ${listingFact('Başvuru tarih aralığı', dateRange)}
+      ${listingFact('Yayın tarihi', published || 'Kaynakta belirtilmemiş')}
+      ${listingFact('Görev yeri', listing.city || 'Kaynakta belirtilmemiş')}
+      ${listingFact('Aranan bölümler / öğrenim', listing.education || 'Kaynakta belirtilmemiş')}
+      ${listingFact('KPSS şartı ve puan', score)}
+      ${listingFact('İlan türü', listing.category || 'Kaynakta belirtilmemiş')}
+      ${listingFact('Başvuru durumu', status)}
+    </div>
+    <section class="detail-description"><h3>İlan açıklaması</h3><p>${escapeHTML(listing.summary || 'Kaynak tarafından ayrıca bir açıklama sağlanmamış. Ayrıntılar için resmî duyuruyu incele.')}</p></section>
+    ${eligibilityMarkup(listing)}
+    <div class="detail-dialog-actions">${url ? `<a class="details-button" href="${escapeHTML(url)}" target="_blank" rel="noopener">Resmî ilanı aç ↗</a>` : '<span class="detail-no-link">Resmî bağlantı kaynak verisinde yok.</span>'}</div>
+    <p class="detail-warning">Bu kart kaynaklardan alınabilen bilgilerin özetidir. Eksik şartlar, özel koşullar, belgeler ve başvuru yöntemi için resmî ilan metni ve ekleri esas alınmalıdır.</p>`;
+  dialog.showModal();
+}
+
 function bindEvents() {
   $$('.nav-link, .mobile-nav-link').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
   $$('[data-go]').forEach(button => button.addEventListener('click', () => setView(button.dataset.go)));
@@ -556,6 +606,10 @@ function bindEvents() {
     }
   });
   document.addEventListener('click', event => {
+    const closeDetail = event.target.closest('[data-close-detail]');
+    if (closeDetail) $('#listingDetailDialog')?.close();
+    const detailButton = event.target.closest('[data-detail-id]');
+    if (detailButton) openListingDetails(detailButton.dataset.detailId);
     const saveButton = event.target.closest('[data-save-id]');
     if (saveButton) {
       const item = [...state.listings, ...state.saved].find(listing => listing.id === saveButton.dataset.saveId);
