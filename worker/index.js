@@ -993,7 +993,7 @@ async function syncOneSource(source, env) {
   } catch (error) {
     const message = safeText(error?.message || 'Bilinmeyen kaynak hatası', 500);
     const homepage = await probeSourceHomepage(source);
-    const status = homepage.reachable ? 'degraded' : 'failed';
+    const status = 'failed';
     const detail = homepage.reachable
       ? message + ' Ana site erişilebilir; ilan veri akışı çalışmıyor.'
       : message + ' ' + homepage.reason;
