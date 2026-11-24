@@ -471,9 +471,11 @@ function renderSourceStatuses(sources) {
   if (footnote) {
     const checked = sources.map(source => source.checkedAt).filter(Boolean).map(value => new Date(value)).filter(date => !Number.isNaN(date.getTime())).sort((a, b) => b - a)[0];
     const failed = sources.filter(source => source.status === 'failed').length;
+    const degraded = sources.filter(source => source.status === 'degraded').length;
+    const pending = sources.filter(source => source.status === 'pending').length;
     const connected = sources.filter(source => source.status === 'connected').length;
     const detail = checked ? `Son kaynak kontrolü: ${checked.toLocaleString('tr-TR')}` : 'Henüz kaynak kontrol kaydı yok.';
-    const status = failed ? `Otomatik kontrol etkin · 30 dakikada bir · ${connected} bağlı, ${failed} erişim hatası. ${detail}` : `Otomatik kontrol etkin · 30 dakikada bir. ${detail}`;
+    const status = `Otomatik kontrol etkin · 30 dakikada bir · ${connected} ilan akışı bağlı, ${degraded} site açık/akış hatalı, ${failed} erişilemiyor, ${pending} beklemede. ${detail}`;
     const label = $('span:last-child', footnote);
     if (label) label.textContent = status;
     footnote.title = status;
@@ -485,7 +487,7 @@ function renderSourceStatuses(sources) {
     if (!source) return;
     const stateEl = $('.source-state', row);
     if (!stateEl) return;
-    const labels = { connected: 'Bağlı', pending: 'İlk kontrol bekleniyor', failed: 'Erişim hatası' };
+    const labels = { connected: 'Bağlı', degraded: 'Site açık · akış hatalı', pending: 'İlk kontrol bekleniyor', failed: 'Erişim hatası' };
     stateEl.textContent = labels[source.status] || 'Durum bilinmiyor';
     stateEl.className = `source-state ${source.status || 'pending'}`;
     const detailEl = $('.source-copy small', row);
