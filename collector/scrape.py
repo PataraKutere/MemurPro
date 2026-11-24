@@ -16,7 +16,7 @@ _retry=Retry(total=3, connect=3, read=2, backoff_factor=0.8, status_forcelist=(4
 S.mount("https://", HTTPAdapter(max_retries=_retry, pool_connections=10, pool_maxsize=10))
 S.mount("http://", HTTPAdapter(max_retries=_retry, pool_connections=5, pool_maxsize=5))
 S.headers.update({"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36","Accept-Language":"tr-TR,tr;q=0.9"})
-RE=re.compile(r"personel\s+al[ıi]m|memur\s+al[ıi]m|sözleşmeli\s+personel|işçi\s+al[ıi]m|öğretim\s+(?:üyesi|elemanı|görevlisi)\s+al[ıi]m|uzman\s+yardımcısı|müfettiş\s+yardımcısı|zabıta\s+memuru|itfaiye\s+eri",re.I)
+RE=re.compile(r"personel\s+al[ıi]m[ıi]?|memur\s+al[ıi]m[ıi]?|sözleşmeli\s+personel|işçi\s+al[ıi]m[ıi]?|öğretim\s+(?:üyesi|elemanı|görevlisi)\s+al[ıi]m[ıi]?|uzman\s+yardımcısı|müfettiş\s+yardımcısı|zabıta\s+memuru|itfaiye\s+eri",re.I)
 BAD=re.compile(r"\b(sonuç|yerleştirilen|kazanan|iptal|düzeltme|duyuru sonucu|cevap anahtarı|cevap kâğıdı|aday cevapları|kura sonucu|atama sonucu)\b",re.I)
 
 def tx(v): return re.sub(r"\s+"," ",BeautifulSoup(str(v or ""),"html.parser").get_text(" ",strip=True)).strip()
@@ -104,6 +104,28 @@ def scrape_kariyer(browser):
         print("Kariyer sayfası XHR adresleri:",", ".join(dict.fromkeys(api_urls[-10:])) or "XHR bulunamadı",file=sys.stderr)
         if captured:
             return kariyer_rows(max(captured,key=lambda x:len(x.get("searchIlan",[]))))
+        # API 406 verirse, herkese açık aktif ilan kartlarını sayfanın görünen DOM'undan oku.
+        dom_items=[]; seen=set()
+        for a in p.locator("a[href]").all():
+            try:
+                href=urljoin("https://kariyerkapisi.gov.tr/isealim",a.get_attribute("href") or "")
+                if urlparse(href).hostname not in ("kariyerkapisi.gov.tr","www.kariyerkapisi.gov.tr"): continue
+                if href.rstrip("/") in ("https://kariyerkapisi.gov.tr/isealim","https://kariyerkapisi.gov.tr"): continue
+                context=tx(a.locator("xpath=ancestor::*[self::article or self::li or self::tr or self::div][1]").inner_text(timeout=1000))
+                anchor=tx(a.inner_text(timeout=1000))
+                combined=anchor+" "+context
+                if not RE.search(combined) and not re.search(r"ilan(?:a)?\s+git|detay",anchor,re.I): continue
+                title_match=next((line for line in context.split("  ") if RE.search(line)),None)
+                title=title_match or anchor
+                if len(title)<8 or href in seen: continue
+                seen.add(href)
+                dom_items.append(item("kariyer-kapisi",href,title,"Kariyer Kapısı (kurum bilgisi ilanda)",href,
+                    context or "Kariyer Kapısı aktif ilan kartı; şartlar ve tarihler resmî ilandan doğrulanmalı.",
+                    category="Memur",status="check_required"))
+            except Exception: continue
+        if dom_items:
+            print(f"Kariyer DOM yedek yöntemi: {len(dom_items)} ilan kartı",file=sys.stderr)
+            return dom_items[:150]
         body={"krM_ID":0,"searchText":"","il":"0","ilanTuru":"0"}
         last_error=None
         for endpoint in ("https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage","https://kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage"):
@@ -293,7 +315,8 @@ def scrape_iskur(browser):
             sel=sels.nth(i); opts=sel.locator("option")
             for j in range(opts.count()):
                 opt=opts.nth(j)
-                if tx(opt.inner_text()).lower()=="kamu":
+                option_label=tx(opt.inner_text()).casefold()
+                if option_label=="kamu" or option_label.startswith("kamu "):
                     sel.select_option(opt.get_attribute("value")); chosen=True; break
             if chosen: break
         if not chosen: raise RuntimeError("Oturumsuz İŞKUR sayfasında Kamu filtresi yok; kaynak atlandı.")
@@ -326,7 +349,7 @@ def scrape_sbb(browser):
     finally: p.close()
 
 SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":scrape_ilan,"kamuilan-sbb":scrape_sbb,"iskur":scrape_iskur}
-SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":360,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"iskur":240}
+SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"iskur":240}
 def report(sid,items=None,error=None):
     if not TOKEN: raise RuntimeError("MEMURPRO_INGEST_TOKEN secret is missing")
     r=requests.post(API+"/api/ingest",headers={"x-admin-token":TOKEN},json={"sourceId":sid,"items":items or [],"error":error},timeout=30); r.raise_for_status(); return r.json()
