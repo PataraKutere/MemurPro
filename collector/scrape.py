@@ -465,7 +465,7 @@ def scrape_iskur_memur(browser):
                 try:
                     pdf_response=S.get(detail,timeout=30,headers={"Referer":"https://www.iskur.gov.tr/"})
                     pdf_response.raise_for_status()
-                    reader=PdfReader(BytesIO(pdf_response.content))
+                    reader=PdfReader(io.BytesIO(pdf_response.content))
                     full_text=tx(" ".join(page.extract_text() or "" for page in reader.pages))[:12000]
                     if not full_text:
                         raise RuntimeError("İŞKUR PDF metni boş veya taranmış görüntü.")
