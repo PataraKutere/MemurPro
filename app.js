@@ -711,11 +711,13 @@ function renderSourceStatuses(sources) {
     const zeroItems = source.status === 'connected' && hasCount && Number(source.latestItemCount) === 0;
     const accessError = /HTTP 403|403/.test(errorText) ? 'Erişim engeli · HTTP 403' : /HTTP 406|406/.test(errorText) ? 'Erişim engeli · HTTP 406' : '';
     const parseError = /parse|ayrıştır|beklenen|JSON|liste biçimi|metin boş/i.test(errorText);
+    const robotsError = /robots\.txt/i.test(errorText);
+    const failureLabel = robotsError ? 'robots.txt tarama izni yok' : accessError || (parseError ? 'Ayrıştırma hatası' : 'Kaynağa erişilemiyor');
     const labels = {
       connected: hasCount ? (zeroItems ? 'Başarılı · 0 ilan' : `Başarılı · ${Number(source.latestItemCount)} ilan`) : 'Bağlı · ilan sayısı ölçülmedi',
-      degraded: accessError || (parseError ? 'Ayrıştırma hatası' : 'Site açık · veri akışı hatalı'),
+      degraded: robotsError ? 'robots.txt tarama izni yok' : accessError || (parseError ? 'Ayrıştırma hatası' : 'Site açık · veri akışı hatalı'),
       pending: 'Kontrol bekleniyor',
-      failed: accessError || (parseError ? 'Ayrıştırma hatası' : 'Kaynağa erişilemiyor')
+      failed: failureLabel
     };
     stateEl.textContent = labels[source.status] || 'Durum bilinmiyor';
     stateEl.className = `source-state ${source.status || 'pending'}`;
