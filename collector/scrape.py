@@ -5,7 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
-API=os.environ["MEMURPRO_API_BASE"].rstrip("/")
+API=os.environ["MEMURPRO_API_BASE"].rstrip("/")  # public MemurPro read API
 TOKEN=os.environ.get("MEMURPRO_INGEST_TOKEN","")
 S=requests.Session()
 S.headers.update({"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36","Accept-Language":"tr-TR,tr;q=0.9"})
