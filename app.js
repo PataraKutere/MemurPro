@@ -258,6 +258,35 @@ function renderListings() {
   $('#listingResults').innerHTML = filtered.length ? filtered.map(listingCard).join('') : `<div class="listing-placeholder"><strong>Bu kriterlerle eşleşen ilan yok</strong><p>Filtrelerini değiştirerek yeniden deneyebilirsin.</p></div>`;
 }
 
+function renderLatestListings() {
+  const container = $('#latestListings');
+  const count = $('.latest-block .empty-count');
+  if (!container) return;
+  if (!state.listings.length) {
+    if (count) count.textContent = 'Canlı akış bekleniyor';
+    container.innerHTML = `<div class="empty-state compact-empty"><span class="empty-icon">⌕</span><div><strong>Henüz doğrulanmış ilan yok</strong><p>Kaynaklardan ilan aktarıldığında en yeni kayıtlar burada görünecek.</p></div><button class="button button-outline" data-go="listings">İlan ekranını aç</button></div>`;
+    return;
+  }
+  const latest = [...state.listings].sort((a, b) => {
+    const da = a.publishedAt || a.createdAt || '';
+    const db = b.publishedAt || b.createdAt || '';
+    return db.localeCompare(da);
+  }).slice(0, 3);
+  if (count) count.textContent = `${state.listings.length} kayıt`;
+  container.innerHTML = latest.map(listingCard).join('');
+}
+
+function updateLiveNotice() {
+  const banner = $('.notice-banner');
+  if (!banner || !state.listings.length) return;
+  const strong = $('strong', banner);
+  const paragraph = $('p', banner);
+  const pill = $('.preview-pill', banner);
+  if (strong) strong.textContent = 'Resmî kaynaklardan kayıtlar yüklendi';
+  if (paragraph) paragraph.textContent = `${state.listings.length} kayıt MemurPro'ya aktarıldı. Başvuru durumu ve son tarihler için ilan kartındaki resmî kaynağı kontrol et.`;
+  if (pill) pill.textContent = 'KAYITLAR YÜKLENDİ';
+}
+
 function hasCandidateProfile() {
   const p = state.profile;
   return Boolean(p && (p.education || p.department || p.scoreType || p.city || (p.score !== null && p.score !== undefined && p.score !== '')));
@@ -542,6 +571,8 @@ async function loadLiveData() {
     state.sources = Array.isArray(payload.sources) ? payload.sources : state.sources;
     updateSourceFilter();
     renderListings();
+    renderLatestListings();
+    updateLiveNotice();
     renderMatchedListings();
     if (state.view === 'saved') renderSaved();
     if (payload.sources) renderSourceStatuses(payload.sources);
@@ -851,6 +882,7 @@ function init() {
   bindEvents();
   updateSourceFilter();
   renderListings();
+  renderLatestListings();
   renderSaved();
   loadLiveData();
 
