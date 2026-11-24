@@ -327,7 +327,9 @@ async function fetchKariyerKapisi(source) {
       if (![429, 500, 502, 503, 504].includes(response.status)) throw lastError;
     } catch (error) {
       lastError = error;
-      if (attempt === 2) throw new Error('Kariyer Kapısı erişimi başarısız: ' + safeText(error?.message || error, 300));
+      const status = response?.status;
+      const retryable = !status || [429, 500, 502, 503, 504].includes(status);
+      if (!retryable || attempt === 2) throw new Error('Kariyer Kapısı erişimi başarısız: ' + safeText(error?.message || error, 300));
     } finally {
       clearTimeout(timeout);
     }
@@ -600,14 +602,13 @@ export default {
       }
       if (request.method === 'GET' && url.pathname === '/api/listings') {
         const [listings, sources] = await Promise.all([getListings(request, env), getSources(env)]);
-        return json({ listings, sources, updatedAt: new Date().toISOString() }, 200, { 'cache-control': 'public, max-age=60' });
+        return json({ listings, sources, updatedAt: new Date().toISOString() });
       }
       if (request.method === 'POST' && url.pathname === '/api/sync-now') {
-        if (ctx && typeof ctx.waitUntil === 'function') {
-          ctx.waitUntil(syncConfiguredSources(env).catch(error => console.error('MemurPro manual sync failed:', error)));
-          return json({ ok: true, queued: true, message: 'Kaynak kontrolü başlatıldı. Sonuçlar kaynak durumlarına yansıyacak.' }, 202);
-        }
-        return json({ results: await syncConfiguredSources(env) });
+        // Keep the HTTP request open until the sync completes. waitUntil() only
+        // extends background work by 30 seconds after the response on Free plans.
+        const results = await syncConfiguredSources(env);
+        return json({ ok: true, completed: true, results });
       }
       if (request.method === 'POST' && url.pathname === '/api/admin/sync') {
         if (!env.ADMIN_TOKEN || request.headers.get('x-admin-token') !== env.ADMIN_TOKEN) return json({ error: 'Yetkisiz işlem.' }, 401);
