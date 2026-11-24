@@ -40,6 +40,8 @@ Kaynak taraması GitHub Actions üzerinde, Chromium tabanlı Playwright ile çal
 
 İlk kurulumda GitHub deposunda **Settings → Secrets and variables → Actions → New repository secret** yoluyla `MEMURPRO_INGEST_TOKEN` adlı secret eklenmelidir. Değeri, Cloudflare Worker `memurpro-api` içindeki mevcut `ADMIN_TOKEN` secret ile aynı olmalıdır. Bu token kaynak koduna yazılmaz.
 
+Tekrarlanan kaynak hataları için isteğe bağlı Telegram uyarısı vardır. Cloudflare Worker ayarlarında `TELEGRAM_BOT_TOKEN` ve `TELEGRAM_CHAT_ID` adlarıyla iki secret tanımlanırsa, üçüncü ardışık hatada ve sonraki her üç hatada bildirim gönderilir. Bu secret'lar tanımlı değilse veri kaydı etkilenmez.
+
 `collector/scrape.py` kaynaklardan veriyi toplar, sonuç/iptal duyurularını filtreler ve `POST /api/ingest` adresine gönderir. Worker artık kaynak siteleri taramaz; yalnızca token doğrular, alanları normalize eder, D1'e yazar ve kaynak hata sayacı/backoff bilgisini tutar.
 
 ## Cloudflare Worker API
