@@ -141,6 +141,7 @@ function renderSaved() {
 async function loadLiveData() {
   try {
     const apiBase = String(window.MEMURPRO_API_BASE || '').replace(/\/$/, '');
+    if (!apiBase) return; // GitHub Pages tek başına kullanılıyorsa API çağrısı yapma.
     const response = await fetch(`${apiBase}/api/listings`, { headers: { Accept: 'application/json' } });
     if (!response.ok) throw new Error(`API ${response.status}`);
     const payload = await response.json();
