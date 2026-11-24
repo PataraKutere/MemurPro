@@ -295,11 +295,22 @@ async function refreshSources() {
 
     await loadLiveData();
     const results = Array.isArray(payload.results) ? payload.results : [];
-    const imported = results.reduce((sum, item) => sum + (Number(item.imported) || 0), 0);
+    const processed = results.reduce((sum, item) => sum + (Number(item.imported) || 0), 0);
     const failed = results.filter(item => item.status === 'failed').length;
-    showToast(failed
-      ? `Kontrol bitti: ${imported} ilan kaydı · ${failed} kaynakta erişim hatası.`
-      : `Kaynak kontrolü tamamlandı: ${imported} ilan kaydı alındı.`);
+    const connected = results.filter(item => item.status === 'connected').length;
+    const skipped = results.filter(item => item.skipped || item.status === 'pending').length;
+    const summary = results.map(item => {
+      const state = item.status === 'connected' ? '✓' : item.status === 'failed' ? '!' : '–';
+      return `${state} ${item.source}${item.message ? ': ' + item.message : ''}`;
+    }).join('\n');
+    if (summary) console.info('MemurPro kaynak kontrolü:\n' + summary);
+    if (failed) {
+      showToast(`Kontrol bitti: ${connected} bağlı, ${failed} hatalı, ${skipped} beklemede.`);
+    } else if (!connected && skipped) {
+      showToast('Yeni kontrol yapılmadı; kaynakların kontrol aralığı henüz dolmadı.');
+    } else {
+      showToast(`Kontrol tamamlandı: ${processed} kayıt işlendi, ${connected} kaynak bağlı.`);
+    }
   } catch (error) {
     showToast(`Kaynak kontrolü başlatılamadı: ${error.message}`);
   } finally {
