@@ -80,19 +80,23 @@ def scrape_kariyer(browser):
     finally: p.close()
 
 def scrape_resmi():
-    now=datetime.now(timezone.utc)+timedelta(hours=3); out=[]
+    now=datetime.now(timezone.utc)+timedelta(hours=3); out=[]; read_ok=False; errors=[]
     for off in range(3):
         d=now.date()-timedelta(days=off); key=d.strftime("%Y%m%d"); index=f"https://www.resmigazete.gov.tr/fihrist?tarih={d.isoformat()}"
         try:
             r=S.get(index,timeout=12); r.raise_for_status(); soup=BeautifulSoup(decode(r),"html.parser")
             a=next((a for a in soup.find_all("a",href=True) if re.search(r"çeşitli\s+il[âa]nlar",tx(a),re.I)),None)
             if a:
-                u=urljoin(index,a["href"]); page=S.get(u,timeout=12); page.raise_for_status(); html=decode(page); ps=BeautifulSoup(html,"html.parser")
+                u=urljoin(index,a["href"]); page=S.get(u,timeout=12); page.raise_for_status(); html=decode(page)
+                if not re.search(r"çeşitli\s+il[âa]nlar",tx(html),re.I): raise RuntimeError("Fihrist bağlantısı Çeşitli İlanlar içeriğini vermedi")
+                read_ok=True; ps=BeautifulSoup(html,"html.parser")
             else:
                 u=f"https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/{d.year}/{d.month:02d}/{key}-4.htm"
                 page=S.get(u,timeout=12)
                 if not page.ok: continue
-                html=decode(page); ps=BeautifulSoup(html,"html.parser")
+                html=decode(page)
+                if not re.search(r"çeşitli\s+il[âa]nlar",tx(html),re.I): continue
+                read_ok=True; ps=BeautifulSoup(html,"html.parser")
             for a in ps.find_all("a",href=True):
                 title=tx(a); href=urljoin(u,a["href"])
                 if urlparse(href).hostname not in ("www.resmigazete.gov.tr","resmigazete.gov.tr"): continue
@@ -103,7 +107,9 @@ def scrape_resmi():
                 if m: inst=m.group(1)
                 out.append(item("resmi-gazete",href,title or context[:250],inst,href,"Resmî Gazete Çeşitli İlânlar bölümü; başvuru şartları resmî belgeyle doğrulanmalı.",category="Memur",publishedAt=f"{d.year}-{d.month:02d}-{d.day:02d}"))
             if out: break
-        except Exception as e: print(f"Resmî Gazete {d}: {e}",file=sys.stderr)
+        except Exception as e:
+            errors.append(f"{d}: {e}"); print(f"Resmî Gazete {d}: {e}",file=sys.stderr)
+    if not read_ok: raise RuntimeError("Resmî Gazete Çeşitli İlânlar sayfası okunamadı. "+"; ".join(errors[-2:])[:250])
     return out[:100]
 
 def scrape_osym():
@@ -164,7 +170,12 @@ def scrape_iskur(browser):
 def scrape_sbb(browser):
     p=browser.new_page()
     try:
-        p.goto("https://kamuilan.sbb.gov.tr/",wait_until="domcontentloaded",timeout=25000); p.wait_for_timeout(1500)
+        response=p.goto("https://kamuilan.sbb.gov.tr/",wait_until="domcontentloaded",timeout=25000)
+        if response and response.status>=400: raise RuntimeError(f"SBB portal HTTP {response.status}")
+        p.wait_for_timeout(1500)
+        page_text=tx(p.locator("body").inner_text())
+        if re.search(r"access denied|forbidden|captcha|robot doğrulama",page_text,re.I):
+            raise RuntimeError("SBB portalı tarayıcı isteğini engelledi.")
         return sbb_html(p.content())
     finally: p.close()
 
@@ -189,15 +200,17 @@ def main():
                 try:
                     items=[x for x in scraper(browser) if keep(x)]
                     if dry:
-                        results.append({"source":sid,"count":len(items),"dryRun":True})
+                        results.append({"source":sid,"status":"connected","count":len(items),"dryRun":True})
                         print(f"DRY RUN {sid}: {len(items)} kayıt")
                         continue
                     result=report(sid,items); results.append({"source":sid,**result})
                     print(f"OK {sid}: {result.get('imported',0)}")
                 except Exception as e:
                     msg=f"{type(e).__name__}: {e}"[:450]; print("ERROR",sid,msg,file=sys.stderr)
-                    try: results.append({"source":sid,**report(sid,error=msg)})
-                    except Exception as ie: results.append({"source":sid,"error":msg,"ingestError":str(ie)})
+                    try:
+                        failed_report=report(sid,error=msg) if not dry else {"status":"failed"}
+                        results.append({"source":sid,**failed_report,"error":msg})
+                    except Exception as ie: results.append({"source":sid,"status":"failed","error":msg,"ingestError":str(ie)})
         finally: browser.close()
     print(json.dumps(results,ensure_ascii=False))
     if not results or all(x.get("status")=="failed" for x in results): sys.exit(1)
