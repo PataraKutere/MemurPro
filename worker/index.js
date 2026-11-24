@@ -36,13 +36,19 @@ function parseXmlFeed(xml, source) {
     const description = xmlText(tag(block, 'description') || tag(block, 'summary') || tag(block, 'content'));
     const published = xmlText(tag(block, 'pubDate') || tag(block, 'published') || tag(block, 'updated'));
     if (!title || !link) return null;
+
+    if (source.id === 'resmi-gazete') {
+      const searchable = (title + ' ' + description).toLocaleLowerCase('tr-TR');
+      if (!/(personel alım|personel alımı|memur alım|sözleşmeli personel|işçi alım|araştırma görevlisi|öğretim görevlisi|uzman yardımcısı|müfettiş yardımcısı|kariyer uzman|başvuru ilanı)/i.test(searchable)) return null;
+    }
+
     const url = new URL(link, source.homepage_url).toString();
     return {
       externalId: url,
       title,
       institution: source.name,
       summary: description,
-      category: 'Kamu ilanı',
+      category: source.id === 'resmi-gazete' ? 'Resmî Gazete' : classifyPublicCategory(title),
       detailUrl: url,
       publishedAt: normalizeDate(published),
       sourceName: source.name,
