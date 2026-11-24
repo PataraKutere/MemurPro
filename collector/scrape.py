@@ -641,6 +641,8 @@ def report(sid,items=None,error=None):
 def main():
     r=S.get(API+"/api/sources",timeout=20); r.raise_for_status(); sources={x["id"]:x for x in r.json().get("sources",[])}
     now=datetime.now(timezone.utc); results=[]; dry=os.environ.get("COLLECTOR_DRY_RUN")=="1"
+    force=os.environ.get("COLLECTOR_FORCE")=="1"
+    if force: print("FORCE RECHECK: self-hosted runner seçildi; kaynak aralıkları ve backoff atlanacak.")
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=True)
         try:
@@ -648,13 +650,13 @@ def main():
                 src=sources.get(sid)
                 if not src or not src.get("enabled",1): continue
                 backoff=src.get("backoffUntil")
-                if backoff:
+                if backoff and not force:
                     try:
                         if datetime.fromisoformat(backoff.replace("Z","+00:00"))>now:
                             print("BACKOFF",sid,"yeniden deneme",backoff); continue
                     except ValueError: pass
                 checked=src.get("checkedAt")
-                if checked and src.get("status") not in ("failed","degraded"):
+                if checked and src.get("status") not in ("failed","degraded") and not force:
                     try:
                         last=datetime.fromisoformat(checked.replace("Z","+00:00"))
                         interval=SOURCE_INTERVAL_MINUTES.get(sid,120)
