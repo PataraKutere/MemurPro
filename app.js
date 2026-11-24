@@ -153,15 +153,19 @@ function updateSourceFilter() {
   const select = $('#sourceFilter');
   if (!select) return;
   const selected = select.value || state.filters.source || '';
-  const names = new Map([
-    ['Kariyer Kapısı', null], ['ÖSYM', null], ['İŞKUR', null],
-    ['İlan.gov.tr', null], ['Resmî Gazete', null], ['Kamu İlanları (SBB)', null]
-  ]);
+  // Filtre seçeneklerini yalnızca Genel Bakış > Veri Kaynakları bölümündeki
+  // resmî kaynak satırlarından üret. API yanıtı gelmese bile seçenekler görünür.
+  const names = new Map(
+    $('.source-row .source-copy strong')
+      .map(element => [element.textContent.trim(), null])
+      .filter(([name]) => name)
+  );
   state.sources.forEach(source => {
-    if (source?.name) names.set(String(source.name), source);
-  });
-  state.listings.forEach(item => {
-    if (item?.sourceName && !names.has(String(item.sourceName))) names.set(String(item.sourceName), null);
+    if (!source?.name) return;
+    const officialName = [...names.keys()].find(name =>
+      name.toLocaleLowerCase('tr-TR') === String(source.name).toLocaleLowerCase('tr-TR')
+    );
+    if (officialName) names.set(officialName, source);
   });
   const counts = new Map();
   state.listings.forEach(item => {
@@ -797,6 +801,7 @@ function init() {
   updateSavedCount();
   populateProfile();
   bindEvents();
+  updateSourceFilter();
   renderListings();
   renderSaved();
   loadLiveData();
