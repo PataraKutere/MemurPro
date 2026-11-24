@@ -141,7 +141,7 @@ function renderSaved() {
 async function loadLiveData() {
   try {
     const apiBase = String(window.MEMURPRO_API_BASE || '').replace(/\/$/, '');
-    if (!apiBase) return; // GitHub Pages tek başına kullanılıyorsa API çağrısı yapma.
+    if (!apiBase) return null; // GitHub Pages tek başına kullanılıyorsa API çağrısı yapma.
     const response = await fetch(`${apiBase}/api/listings`, { headers: { Accept: 'application/json' } });
     if (!response.ok) throw new Error(`API ${response.status}`);
     const payload = await response.json();
@@ -150,8 +150,10 @@ async function loadLiveData() {
     renderListings();
     if (state.view === 'saved') renderSaved();
     if (payload.sources) renderSourceStatuses(payload.sources);
+    return payload;
   } catch {
     // API yoksa uygulama kontrollü ön izleme durumunda kalır; sahte ilan eklenmez.
+    return null;
   }
 }
 
@@ -285,9 +287,20 @@ async function refreshSources() {
     const response = await fetch(`${apiBase}/api/sync-now`, { method: 'POST', headers: { Accept: 'application/json' } });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || `API ${response.status}`);
-    showToast('Kaynak kontrolü başlatıldı. Sonuçlar birazdan güncellenecek.');
-    await new Promise(resolve => window.setTimeout(resolve, 5000));
-    await loadLiveData();
+    showToast('Kaynak kontrolü başlatıldı. Sonuçlar bekleniyor.');
+    let completed = false;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await new Promise(resolve => window.setTimeout(resolve, 4000));
+      const latest = await loadLiveData();
+      const sources = latest?.sources || [];
+      if (sources.length && sources.every(source => source.lastError !== 'Kontrol ediliyor.')) {
+        completed = true;
+        break;
+      }
+      if (button) button.textContent = 'Kaynaklar kontrol ediliyor…';
+    }
+    if (completed) showToast('Kaynak kontrolü tamamlandı. Durumlar güncellendi.');
+    else showToast('Kontrol hâlâ sürüyor. Biraz sonra kaynak listesini yenileyebilirsin.');
   } catch (error) {
     showToast(`Kaynak kontrolü başlatılamadı: ${error.message}`);
   } finally {
