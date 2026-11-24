@@ -153,7 +153,10 @@ function updateSourceFilter() {
   const select = $('#sourceFilter');
   if (!select) return;
   const selected = select.value || state.filters.source || '';
-  const names = new Map();
+  const names = new Map([
+    ['Kariyer Kapısı', null], ['ÖSYM', null], ['İŞKUR', null],
+    ['İlan.gov.tr', null], ['Resmî Gazete', null], ['Kamu İlanları (SBB)', null]
+  ]);
   state.sources.forEach(source => {
     if (source?.name) names.set(String(source.name), source);
   });
@@ -172,7 +175,7 @@ function updateSourceFilter() {
       source?.status === 'degraded' ? ' · kısmi sorun' :
       source?.status === 'failed' ? ' · erişilemiyor' :
       source?.status === 'pending' ? ' · beklemede' : '';
-    return '<option value="' + escapeHTML(name) + '">' + escapeHTML(name) + ' (' + count + ' ilan' + status + ')</option>';
+    return '<option value="' + escapeHTML(name) + '">' + escapeHTML(name) + ' · ' + count + ' ilan' + status + '</option>';
   }).join('');
   if ([...select.options].some(option => option.value === selected)) select.value = selected;
   else if (selected) {
