@@ -492,7 +492,7 @@ function renderSourceStatuses(sources) {
     const details = [];
     if (source.lastError) details.push(source.lastError);
     else if (source.checkedAt) details.push(`Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`);
-    else details.push('Otomatik kontrol henüz çalışmadı.');
+    else details.push('Zamanlayıcı etkin; bu kaynak için ilk kontrol henüz tamamlanmadı.');
     if (detailEl) {
       detailEl.textContent = details.join(' · ');
       detailEl.title = details.join(' · ');
