@@ -16,7 +16,7 @@ _retry=Retry(total=3, connect=3, read=2, backoff_factor=0.8, status_forcelist=(4
 S.mount("https://", HTTPAdapter(max_retries=_retry, pool_connections=10, pool_maxsize=10))
 S.mount("http://", HTTPAdapter(max_retries=_retry, pool_connections=5, pool_maxsize=5))
 S.headers.update({"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36","Accept-Language":"tr-TR,tr;q=0.9"})
-RE=re.compile(r"personel\s+al[ıi]m[ıi]?|memur\s+al[ıi]m[ıi]?|sözleşmeli\s+personel|işçi\s+al[ıi]m[ıi]?|öğretim\s+(?:üyesi|elemanı|görevlisi)\s+al[ıi]m[ıi]?|uzman\s+yardımcısı|müfettiş\s+yardımcısı|zabıta\s+memuru|itfaiye\s+eri",re.I)
+RE=re.compile(r"personel\s+al[ıi]m[ıi]?|memur\s+al[ıi]m[ıi]?|sözleşmeli(?:\s+\w+){0,3}\s+personel|işçi\s+al[ıi]m[ıi]?|öğretim\s+(?:üyesi|elemanı|görevlisi)\s+al[ıi]m[ıi]?|uzman\s+yardımcısı|müfettiş\s+yardımcısı|zabıta\s+memuru|itfaiye\s+eri",re.I)
 BAD=re.compile(r"\b(sonuç|yerleştirilen|kazanan|iptal|düzeltme|duyuru sonucu|cevap anahtarı|cevap kâğıdı|aday cevapları|kura sonucu|atama sonucu)\b",re.I)
 
 def tx(v): return re.sub(r"\s+"," ",BeautifulSoup(str(v or ""),"html.parser").get_text(" ",strip=True)).strip()
