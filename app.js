@@ -277,7 +277,7 @@ function inferredInstitutionType(item) {
 function inferredAnnouncementType(item) {
   if (item.announcementType) return item.announcementType;
   const text = normalizeSearchText([item.title, item.category].join(' '));
-  if (/kpss.*(tercih|yerleştirme)|merkezi yerleştirme/.test(text)) return 'KPSS tercih / yerleştirme';
+  if (/kpss|merkezi yerleştirme/.test(text)) return 'KPSS / sınav duyurusu';
   if (/duyuru|sonuç|takvim/.test(text) && !/alım|alim/.test(text)) return 'Duyuru';
   if (/alım|alim|personel|memur|işçi|zabıta/.test(text)) return 'Personel alımı';
   return 'Diğer ilan';
@@ -927,7 +927,7 @@ function bindEvents() {
   $$('[data-filter-category]').forEach(button => button.addEventListener('click', () => {
     setView('listings');
     const category = button.dataset.filterCategory;
-    if (category === 'KPSS') $('#announcementTypeFilter').value = 'KPSS tercih / yerleştirme';
+    if (category === 'KPSS') $('#announcementTypeFilter').value = 'KPSS / sınav duyurusu';
     else $('#employmentTypeFilter').value = category === 'Sözleşmeli' ? 'Sözleşmeli personel' : category;
     bindFilters();
   }));
