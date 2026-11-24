@@ -104,27 +104,48 @@ def scrape_kariyer(browser):
         print("Kariyer sayfası XHR adresleri:",", ".join(dict.fromkeys(api_urls[-10:])) or "XHR bulunamadı",file=sys.stderr)
         if captured:
             return kariyer_rows(max(captured,key=lambda x:len(x.get("searchIlan",[]))))
-        # API 406 verirse, herkese açık aktif ilan kartlarını sayfanın görünen DOM'undan oku.
+        # API yanıt vermezse, herkese açık ve kullanıcıya görünen ilan kartlarını DOM'dan çıkar.
+        # Detay bağlantısı ve ilan başlığı birlikte doğrulanmadan genel sayfa linkleri kaydedilmez.
         dom_items=[]; seen=set()
         for a in p.locator("a[href]").all():
             try:
-                href=urljoin("https://kariyerkapisi.gov.tr/isealim",a.get_attribute("href") or "")
-                if urlparse(href).hostname not in ("kariyerkapisi.gov.tr","www.kariyerkapisi.gov.tr"): continue
+                raw_href=a.get_attribute("href") or ""
+                href=urljoin("https://kariyerkapisi.gov.tr/isealim",raw_href)
+                host=urlparse(href).hostname or ""
+                if host not in ("kariyerkapisi.gov.tr","www.kariyerkapisi.gov.tr"): continue
                 if href.rstrip("/") in ("https://kariyerkapisi.gov.tr/isealim","https://kariyerkapisi.gov.tr"): continue
-                context=tx(a.locator("xpath=ancestor::*[self::article or self::li or self::tr or self::div][1]").inner_text(timeout=1000))
                 anchor=tx(a.inner_text(timeout=1000))
+                context=""
+                node=a
+                for _ in range(5):
+                    try:
+                        node=node.locator("xpath=..")
+                        candidate=tx(node.inner_text(timeout=1000))
+                        if len(candidate)>len(context) and len(candidate)<3500: context=candidate
+                        if candidate and (RE.search(candidate) or re.search(r"başvuru\s+tarihi|son\s+başvuru",candidate,re.I)): break
+                    except Exception: break
                 combined=anchor+" "+context
-                if not RE.search(combined) and not re.search(r"ilan(?:a)?\s+git|detay",anchor,re.I): continue
-                title_match=next((line for line in context.split("  ") if RE.search(line)),None)
-                title=title_match or anchor
+                detail_like=bool(re.search(r"ilan.?detay|ilan-detay|detay|basvuru|başvuru|guid=|[?&]i=",href,re.I))
+                if not detail_like or not RE.search(combined): continue
+                lines=[tx(x) for x in re.split(r"[\n|•]+",context) if tx(x)]
+                title=next((line for line in lines if RE.search(line) and len(line)>8),anchor)
                 if len(title)<8 or href in seen: continue
                 seen.add(href)
+                start_match=re.search(r"(?:başvuru(?:lar)?|başlangıç)[^0-9]{0,50}(\d{1,2}[./-]\d{1,2}[./-]\d{4})",context,re.I)
+                end_match=re.search(r"(?:son\s+başvuru|başvuruların\s+son\s+günü|bitiş)[^0-9]{0,60}(\d{1,2}[./-]\d{1,2}[./-]\d{4})",context,re.I)
+                edu_match=re.search(r"ön\s+lisans|ortaöğretim|lise|lisans",context,re.I)
+                score_match=re.search(r"\b(P93|P94|P3)\b",context,re.I)
+                start_date=date(start_match.group(1)) if start_match else None
+                end_date=date(end_match.group(1)) if end_match else None
+                is_open=bool(end_date and end_date>=local_today() and (not start_date or start_date<=local_today()))
                 dom_items.append(item("kariyer-kapisi",href,title,"Kariyer Kapısı (kurum bilgisi ilanda)",href,
                     context or "Kariyer Kapısı aktif ilan kartı; şartlar ve tarihler resmî ilandan doğrulanmalı.",
-                    category="Memur",status="check_required"))
+                    category="Memur",education=edu_match.group(0) if edu_match else None,
+                    scoreType=score_match.group(1).upper() if score_match else None,
+                    startDate=start_date,endDate=end_date,status="open" if is_open else "check_required"))
             except Exception: continue
         if dom_items:
-            print(f"Kariyer DOM yedek yöntemi: {len(dom_items)} ilan kartı",file=sys.stderr)
+            print(f"Kariyer DOM yedek yöntemi: {len(dom_items)} doğrulanmış ilan kartı",file=sys.stderr)
             return dom_items[:150]
         body={"krM_ID":0,"searchText":"","il":"0","ilanTuru":"0"}
         last_error=None
