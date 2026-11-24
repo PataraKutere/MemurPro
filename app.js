@@ -27,8 +27,26 @@ function readJSON(key, fallback) {
   }
 }
 
+function decodeHtmlEntities(value) {
+  let text = String(value ?? '');
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ccedil: 'ç', Ccedil: 'Ç', uuml: 'ü', Uuml: 'Ü', ouml: 'ö', Ouml: 'Ö', gbreve: 'ğ', Gbreve: 'Ğ', scedil: 'ş', Scedil: 'Ş', idot: 'ı', Idot: 'İ' };
+  for (let pass = 0; pass < 4; pass++) {
+    const decoded = text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, code) => {
+      if (code[0] === '#') {
+        const hex = code[1]?.toLowerCase() === 'x';
+        const point = Number.parseInt(code.slice(hex ? 2 : 1), hex ? 16 : 10);
+        return Number.isInteger(point) && point >= 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff) ? String.fromCodePoint(point) : '\\uFFFD';
+      }
+      return Object.prototype.hasOwnProperty.call(named, code) ? named[code] : entity;
+    });
+    if (decoded === text) break;
+    text = decoded;
+  }
+  return text;
+}
+
 function escapeHTML(value) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({
+  return decodeHtmlEntities(value).replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   })[char]);
 }
@@ -79,23 +97,52 @@ function toggleSaved(listing) {
   else if (state.view === 'listings') renderListings();
 }
 
+function formatListingDate(value) {
+  if (!value) return '';
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T12:00:00` : value);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function listingFact(label, value) {
+  return `<div class="listing-fact"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value || 'Kaynakta belirtilmemiş')}</strong></div>`;
+}
+
+function safeListingUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch { return ''; }
+}
+
 function listingCard(listing) {
   const saved = isSaved(listing.id);
   const status = listing.status === 'open' ? 'Başvuru açık' : (listing.status === 'closed' ? 'Başvuru kapandı' : 'Kontrol gerekli');
-  const chips = [listing.city, listing.education, listing.scoreType, listing.category]
-    .filter(Boolean).map(item => `<span class="meta-chip">${escapeHTML(item)}</span>`).join('');
-  const endDate = listing.endDate ? new Date(`${listing.endDate}T23:59:59`) : null;
-  const deadline = endDate && !Number.isNaN(endDate.getTime()) ? `Son başvuru: ${endDate.toLocaleDateString('tr-TR')}` : 'Son tarih kaynakta kontrol edilmeli';
+  const start = formatListingDate(listing.startDate);
+  const end = formatListingDate(listing.endDate);
+  const dateRange = start && end ? `${start} – ${end}` : start ? `${start} – Bitiş tarihi belirtilmemiş` : end ? `Başlangıç belirtilmemiş – ${end}` : 'Başvuru tarih aralığı kaynakta belirtilmemiş';
+  const education = listing.education || 'Aranan bölüm / öğrenim şartı belirtilmemiş';
+  const score = listing.scoreType
+    ? `${listing.scoreType}${listing.minimumScore !== null && listing.minimumScore !== undefined && listing.minimumScore !== '' ? ` · Asgari ${listing.minimumScore} puan` : ' · Asgari puan belirtilmemiş'}`
+    : (/KPSS şartı yok|KPSS aranmıyor/i.test(listing.summary || '') ? 'KPSS şartı aranmadığı belirtilmiş' : 'KPSS şartı / puan bilgisi belirtilmemiş');
+  const chips = [listing.city, listing.category].filter(Boolean)
+    .map(item => `<span class="meta-chip">${escapeHTML(item)}</span>`).join('');
+  const url = safeListingUrl(listing.url || listing.detailUrl);
   return `<article class="listing-card">
-    <div><div class="listing-org">${escapeHTML(listing.institution || 'Kurum bilgisi belirtilmemiş')}</div>
+    <div class="listing-main">
+      <div class="listing-org">${escapeHTML(listing.institution || 'Kurum bilgisi belirtilmemiş')}</div>
       <h3>${escapeHTML(listing.title || 'İsimsiz ilan')}</h3>
-      <p>${escapeHTML(listing.summary || '')}</p>
+      <div class="listing-facts">
+        ${listingFact('Başvuru tarihleri', dateRange)}
+        ${listingFact('Aranan bölümler / öğrenim', education)}
+        ${listingFact('KPSS şartı ve puan', score)}
+      </div>
+      ${listing.summary ? `<p class="listing-summary">${escapeHTML(listing.summary)}</p>` : ''}
       ${eligibilityMarkup(listing)}
-      <div class="listing-meta">${chips}<span class="meta-chip">${escapeHTML(deadline)}</span></div>
-      <div class="listing-meta"><span class="listing-status">${escapeHTML(status)}</span><span class="meta-chip">Kaynak: ${escapeHTML(listing.sourceName || 'Resmî kaynak')}</span></div>
+      <div class="listing-meta">${chips}<span class="listing-status">${escapeHTML(status)}</span><span class="meta-chip">Kaynak: ${escapeHTML(listing.sourceName || 'Resmî kaynak')}</span></div>
     </div>
-    <div class="listing-actions"><button class="save-button ${saved ? 'saved' : ''}" data-save-id="${escapeHTML(listing.id)}" aria-label="${saved ? 'Takipten çıkar' : 'Takibe al'}" title="${saved ? 'Takipten çıkar' : 'Takibe al'}">${saved ? '★' : '☆'}</button>
-      ${listing.url ? `<a class="details-button" href="${escapeHTML(listing.url)}" target="_blank" rel="noopener">Resmî ilana git ↗</a>` : ''}
+    <div class="listing-actions">
+      <button class="save-button ${saved ? 'saved' : ''}" data-save-id="${escapeHTML(listing.id)}" aria-label="${saved ? 'Takipten çıkar' : 'Takibe al'}" title="${saved ? 'Takipten çıkar' : 'Takibe al'}">${saved ? '★' : '☆'}</button>
+      ${url ? `<a class="details-button" href="${escapeHTML(url)}" target="_blank" rel="noopener">Resmî ilana git ↗</a>` : ''}
     </div>
   </article>`;
 }
