@@ -1,6 +1,10 @@
 name: MemurPro official-source collector
 
 on:
+  push:
+    paths:
+      - 'collector/**'
+      - '.github/workflows/collect.yml'
   schedule:
     - cron: "7,37 * * * *"
   workflow_dispatch:
@@ -28,11 +32,13 @@ jobs:
       - name: Validate collector syntax
         run: python -m py_compile collector/scrape.py
       - name: Install dependencies and Chromium
+        if: github.event_name != 'push'
         run: |
           python -m pip install --upgrade pip
           pip install -r collector/requirements.txt
           python -m playwright install --with-deps chromium
       - name: Collect official announcements
+        if: github.event_name != 'push'
         env:
           MEMURPRO_API_BASE: https://memurpro-api.28berat28.workers.dev
           MEMURPRO_INGEST_TOKEN: ${{ secrets.MEMURPRO_INGEST_TOKEN }}
