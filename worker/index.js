@@ -559,7 +559,6 @@ async function syncOneSource(source, env) {
 async function syncConfiguredSources(env) {
   const result = await env.DB.prepare(`SELECT id, name, homepage_url, feed_url, feed_type, adapter, enabled, last_checked_at, status FROM sources WHERE enabled=1`).all();
   const sources = result.results || [];
-  const outcomes = [];
   const minIntervals = {
     'kariyer-kapisi': 30 * 60 * 1000,
     'osym': 60 * 60 * 1000,
@@ -568,14 +567,16 @@ async function syncConfiguredSources(env) {
     'resmi-gazete': 24 * 60 * 60 * 1000,
     'iskur': 60 * 60 * 1000
   };
-  const now = Date.now();
-  for (const source of sources) {
+
+  // Claim sources atomically, then fetch independent official sources concurrently.
+  // This keeps a full manual refresh from waiting on each remote site's timeout in turn.
+  const outcomes = await Promise.all(sources.map(async source => {
+    const now = Date.now();
     const lastChecked = source.last_checked_at ? Date.parse(source.last_checked_at) : NaN;
     const minInterval = minIntervals[source.id] || 60 * 60 * 1000;
     const nowIso = new Date(now).toISOString();
     const cutoffIso = new Date(now - minInterval).toISOString();
 
-    // Atomic claim: prevents a visitor button and Cron from polling the same source together.
     const claim = await env.DB.prepare(`
       UPDATE sources
       SET last_checked_at=?, status='pending', last_error='Kontrol ediliyor.'
@@ -583,20 +584,19 @@ async function syncConfiguredSources(env) {
     `).bind(nowIso, source.id, cutoffIso).run();
 
     if (!claim.meta || claim.meta.changes === 0) {
-      outcomes.push({
+      return {
         source: source.name,
         status: source.status,
         imported: 0,
         skipped: true,
         message: Number.isFinite(lastChecked) ? 'Kaynağın kontrol aralığı dolmadı.' : 'Kaynak başka bir işlem tarafından kontrol ediliyor.'
-      });
-      continue;
+      };
     }
-    outcomes.push(await syncOneSource(source, env));
-  }
+    return await syncOneSource(source, env);
+  }));
+
   return outcomes;
 }
-
 export default {
   async fetch(request, env, ctx) {
     if (!env.DB) return json({ error: 'D1 veritabanı bağlantısı yapılandırılmamış.' }, 503);
