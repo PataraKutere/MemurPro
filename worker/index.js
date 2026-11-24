@@ -396,43 +396,52 @@ async function fetchResmiGazete(source) {
   const baseDate = new Date(Date.UTC(Number(today.year), Number(today.month) - 1, Number(today.day)));
   let lastError = null;
 
+  // Resmî site hem www hem de kök alan adından yayın yapabiliyor.
+  // Bir host 404 döndürdüğünde aynı tarih için diğer resmî host da denenir.
   for (let offset = 0; offset < 5; offset++) {
     const date = new Date(baseDate.getTime() - offset * 86400000);
     const year = String(date.getUTCFullYear());
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     const day = String(date.getUTCDate()).padStart(2, '0');
     const dateKey = year + month + day;
-    const pageUrl = 'https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/' + year + '/' + month + '/' + dateKey + '-4.htm';
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    try {
-      const response = await fetch(pageUrl, {
-        signal: controller.signal,
-        headers: {
-          'user-agent': 'Mozilla/5.0 (compatible; MemurPro/0.1; official-public-announcement-monitor)',
-          'accept': 'text/html,application/xhtml+xml',
-          'accept-language': 'tr-TR,tr;q=0.9'
-        },
-        redirect: 'follow'
-      });
-      if (response.status === 404) continue;
-      if (!response.ok) throw new Error('Resmî Gazete Çeşitli İlânlar sayfası HTTP ' + response.status + ' döndürdü.');
-      const html = await response.text();
-      if (html.length > 4_000_000) throw new Error('Resmî Gazete yanıtı güvenli boyut sınırını aşıyor.');
-      const items = parseResmiGazeteItems(html, source, dateKey, pageUrl);
-      if (items.length) return items;
-      // A published daily page without personnel-related notices is a valid empty result.
-      if (/ÇEŞİTLİ\s+İL[ÂA]NLAR/i.test(xmlText(html))) return [];
-      lastError = new Error('Resmî Gazete sayfası açıldı ancak ilan bölümü ayrıştırılamadı.');
-    } catch (error) {
-      lastError = error;
-      if (offset === 0 && /HTTP 403|HTTP 401/.test(error.message)) throw error;
-    } finally {
-      clearTimeout(timeout);
+    const path = '/ilanlar/eskiilanlar/' + year + '/' + month + '/' + dateKey + '-4.htm';
+
+    for (const host of ['https://resmigazete.gov.tr', 'https://www.resmigazete.gov.tr']) {
+      const pageUrl = host + path;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const response = await fetch(pageUrl, {
+          signal: controller.signal,
+          headers: {
+            'user-agent': 'Mozilla/5.0 (compatible; MemurPro/0.1; official-public-announcement-monitor)',
+            'accept': 'text/html,application/xhtml+xml',
+            'accept-language': 'tr-TR,tr;q=0.9'
+          },
+          redirect: 'follow'
+        });
+        if (response.status === 404) {
+          lastError = new Error('Resmî Gazete günlük ilan sayfası bu alan adında bulunamadı (HTTP 404).');
+          continue;
+        }
+        if (!response.ok) {
+          lastError = new Error('Resmî Gazete Çeşitli İlânlar sayfası HTTP ' + response.status + ' döndürdü.');
+          continue;
+        }
+        const html = await response.text();
+        if (html.length > 4_000_000) throw new Error('Resmî Gazete yanıtı güvenli boyut sınırını aşıyor.');
+        const items = parseResmiGazeteItems(html, source, dateKey, pageUrl);
+        if (items.length) return items;
+        if (/ÇEŞİTLİ\s+İL[ÂA]NLAR/i.test(xmlText(html))) return [];
+        lastError = new Error('Resmî Gazete sayfası açıldı ancak Çeşitli İlânlar bölümü doğrulanamadı.');
+      } catch (error) {
+        lastError = error;
+      } finally {
+        clearTimeout(timeout);
+      }
     }
   }
-  if (lastError) throw lastError;
-  throw new Error('Son 5 gün içinde Resmî Gazete Çeşitli İlânlar sayfası bulunamadı.');
+  throw lastError || new Error('Son 5 gün içinde Resmî Gazete Çeşitli İlânlar sayfası bulunamadı.');
 }
 
 async function fetchKariyerKapisi(source) {
