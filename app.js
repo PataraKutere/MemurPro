@@ -467,6 +467,17 @@ async function loadLiveData() {
 }
 
 function renderSourceStatuses(sources) {
+  const footnote = $('#sourceAutomationStatus');
+  if (footnote) {
+    const checked = sources.map(source => source.checkedAt).filter(Boolean).map(value => new Date(value)).filter(date => !Number.isNaN(date.getTime())).sort((a, b) => b - a)[0];
+    const failed = sources.filter(source => source.status === 'failed').length;
+    const connected = sources.filter(source => source.status === 'connected').length;
+    const detail = checked ? `Son kaynak kontrolü: ${checked.toLocaleString('tr-TR')}` : 'Henüz kaynak kontrol kaydı yok.';
+    const status = failed ? `Otomatik kontrol etkin · 30 dakikada bir · ${connected} bağlı, ${failed} erişim hatası. ${detail}` : `Otomatik kontrol etkin · 30 dakikada bir. ${detail}`;
+    const label = $('span:last-child', footnote);
+    if (label) label.textContent = status;
+    footnote.title = status;
+  }
   const rows = new Map(sources.map(source => [source.name, source]));
   $$('.source-row').forEach(row => {
     const name = $('strong', row)?.textContent;
