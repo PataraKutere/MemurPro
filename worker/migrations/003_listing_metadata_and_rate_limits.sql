@@ -1,9 +1,5 @@
--- MemurPro listing metadata and API rate limiting
-ALTER TABLE announcements ADD COLUMN departments_json TEXT NOT NULL DEFAULT '[]';
-ALTER TABLE announcements ADD COLUMN employment_type TEXT;
-ALTER TABLE announcements ADD COLUMN institution_type TEXT;
-ALTER TABLE announcements ADD COLUMN announcement_type TEXT;
-
+-- Listing metadata columns are included in schema.sql and have been applied to the active D1 database.
+-- API rate limiting bucket table.
 CREATE TABLE IF NOT EXISTS api_rate_limits (
   bucket TEXT PRIMARY KEY,
   hits INTEGER NOT NULL DEFAULT 0,
