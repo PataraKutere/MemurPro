@@ -115,12 +115,12 @@ def scrape_resmi():
             if direct not in candidates: candidates.append(direct)
             for u in candidates:
                 page=S.get(u,timeout=12,headers={"Referer":index}); 
-                if not page.ok: errors.append(f"{d}: HTTP {page.status}"); continue
+                if not page.ok: errors.append(f"{d}: HTTP {page.status_code}"); print("Resmî Gazete URL erişim hatası:",u,page.status_code,file=sys.stderr); continue
                 html=decode(page); body=tx(html)
                 has_section=bool(re.search(r"çeşitli\s+il[âa]nlar",body,re.I))
                 has_recruitment=bool(RE.search(body))
                 if not has_section and not has_recruitment:
-                    print("Resmî Gazete içerik kontrolü:",u,"HTTP",page.status,"son URL",page.url,"başlangıç",body[:350],file=sys.stderr)
+                    print("Resmî Gazete içerik kontrolü:",u,"HTTP",page.status_code,"son URL",page.url,"başlangıç",body[:350],file=sys.stderr)
                     errors.append(f"{d}: bölüm başlığı/içerik doğrulanamadı")
                     continue
                 read_ok=True
