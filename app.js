@@ -13,7 +13,9 @@ const state = {
   saved: readJSON(STORAGE_KEYS.saved, []),
   profile: readJSON(STORAGE_KEYS.profile, null),
   tracking: readJSON(STORAGE_KEYS.tracking, {}),
-  filters: { q: '', city: '', education: '', score: '', type: '', source: '' }
+  apiStatus: 'loading',
+  apiError: '',
+  filters: { q: '', department: '', city: '', education: '', score: '', employmentType: '', institutionType: '', announcementType: '', source: '', openOnly: true }
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -65,12 +67,18 @@ function setView(view) {
   if (!validViews.includes(view)) return;
   state.view = view;
   $$('.view').forEach(panel => panel.classList.toggle('active', panel.id === `view-${view}`));
-  $$('.nav-link, .mobile-nav-link').forEach(button => button.classList.toggle('active', button.dataset.view === view));
+  $('.nav-link, .mobile-nav-link').forEach(button => {
+    const active = button.dataset.view === view;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+  });
   const names = { overview: 'Genel Bakış', listings: 'Kamu İlanları', saved: 'Takip Listem', tools: 'Araçlar' };
   $('#breadcrumbCurrent').textContent = names[view];
   if (view === 'saved') renderSaved();
   if (view === 'listings') renderListings();
   if (view === 'overview') renderMatchedListings();
+  const activePanel = $(`#view-${view}`);
+  if (activePanel) { activePanel.setAttribute('tabindex', '-1'); activePanel.focus({ preventScroll: true }); }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -135,7 +143,8 @@ function listingCard(listing) {
   const score = listing.scoreType
     ? `${listing.scoreType}${listing.minimumScore !== null && listing.minimumScore !== undefined && listing.minimumScore !== '' ? ` · Asgari ${listing.minimumScore} puan` : ' · Asgari puan belirtilmemiş'}`
     : (/KPSS şartı yok|KPSS aranmıyor/i.test(listing.summary || '') ? 'KPSS şartı aranmadığı belirtilmiş' : 'KPSS şartı / puan bilgisi belirtilmemiş');
-  const chips = [listing.city, listing.category].filter(Boolean)
+  const dateUnknown = !listing.endDate;
+  const chips = [listing.city, listing.category, dateUnknown ? 'Tarih belirsiz' : ''].filter(Boolean)
     .map(item => `<span class="meta-chip">${escapeHTML(item)}</span>`).join('');
   const url = safeListingUrl(listing.url || listing.detailUrl);
   return `<article class="listing-card">
@@ -227,17 +236,74 @@ function listingSearchText(item) {
     .join(' ');
 }
 
+function departmentAliases(value) {
+  const key = normalizeSearchText(value);
+  const aliases = {
+    'adalet': ['adalet', 'adalet meslek', 'adalet meslek yüksekokulu'],
+    'büro yönetimi': ['büro yönetimi', 'büro yönetimi ve yönetici asistanlığı', 'ofis yönetimi'],
+    'bilgisayar programcılığı': ['bilgisayar programcılığı', 'bilgisayar teknolojisi', 'programlama'],
+    'yerel yönetimler': ['yerel yönetimler', 'mahalli idareler', 'mahalli idareler zabıta'],
+    'çocuk gelişimi': ['çocuk gelişimi', 'çocuk bakımı ve gençlik hizmetleri'],
+    'insan kaynakları': ['insan kaynakları', 'insan kaynakları yönetimi']
+  };
+  return aliases[key] || [String(value || '').trim()];
+}
+
+function departmentMatches(item, requested) {
+  const aliases = departmentAliases(requested).map(normalizeSearchText);
+  const declared = Array.isArray(item.departments) ? item.departments : [];
+  const text = normalizeSearchText([item.education, item.summary, item.title, ...declared].filter(Boolean).join(' '));
+  return aliases.some(alias => alias && text.includes(alias));
+}
+
+function inferredEmploymentType(item) {
+  if (item.employmentType) return item.employmentType;
+  const text = normalizeSearchText([item.title, item.category, item.summary].join(' '));
+  if (/sürekli işçi|geçici işçi|işçi alımı|işçi kadrosu/.test(text)) return 'İşçi';
+  if (/sözleşmeli|4\/b|4-b/.test(text)) return 'Sözleşmeli personel';
+  if (/memur|zabıta|itfaiye|uzman yardımcısı|müfettiş yardımcısı/.test(text)) return 'Memur';
+  return 'Belirtilmemiş';
+}
+
+function inferredInstitutionType(item) {
+  if (item.institutionType) return item.institutionType;
+  const text = normalizeSearchText([item.institution, item.title].join(' '));
+  if (/belediye|büyükşehir/.test(text)) return 'Belediye';
+  if (/üniversite|rektörlük|fakülte/.test(text)) return 'Üniversite';
+  if (/bakanlık|genel müdürlük|başkanlık/.test(text)) return 'Bakanlık / Başkanlık';
+  return 'Diğer kamu kurumu';
+}
+
+function inferredAnnouncementType(item) {
+  if (item.announcementType) return item.announcementType;
+  const text = normalizeSearchText([item.title, item.category].join(' '));
+  if (/kpss.*(tercih|yerleştirme)|merkezi yerleştirme/.test(text)) return 'KPSS tercih / yerleştirme';
+  if (/duyuru|sonuç|takvim/.test(text) && !/alım|alim/.test(text)) return 'Duyuru';
+  if (/alım|alim|personel|memur|işçi|zabıta/.test(text)) return 'Personel alımı';
+  return 'Diğer ilan';
+}
+
+function isPastDeadline(item) {
+  if (!item.endDate) return false;
+  const end = String(item.endDate).slice(0, 10);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(new Date());
+  return /^\d{4}-\d{2}-\d{2}$/.test(end) && end < today;
+}
+
 function applyFilters(listings) {
   const f = state.filters;
   return listings.filter(item => {
     const allText = normalizeSearchText(listingSearchText(item));
     const qualificationText = normalizeSearchText([item.education, item.summary, item.title].filter(Boolean).join(' '));
     if (f.q && !allText.includes(normalizeSearchText(f.q))) return false;
-    if (f.department && !qualificationText.includes(normalizeSearchText(f.department))) return false;
+    if (f.department && !departmentMatches(item, f.department)) return false;
     if (f.city && normalizeSearchText(item.city) !== normalizeSearchText(f.city) && item.city !== 'Türkiye Geneli') return false;
     if (f.education && !qualificationText.includes(normalizeSearchText(f.education))) return false;
     if (f.score && !normalizeSearchText([item.scoreType, item.summary].join(' ')).includes(normalizeSearchText(f.score))) return false;
-    if (f.type && normalizeSearchText(item.category) !== normalizeSearchText(f.type)) return false;
+    if (f.employmentType && inferredEmploymentType(item) !== f.employmentType) return false;
+    if (f.institutionType && inferredInstitutionType(item) !== f.institutionType) return false;
+    if (f.announcementType && inferredAnnouncementType(item) !== f.announcementType) return false;
+    if (f.openOnly && (item.status === 'closed' || isPastDeadline(item))) return false;
     if (f.source) {
       const itemSources = String(item.sourceName || '').split(' · ').map(name => normalizeSearchText(name));
       if (!itemSources.includes(normalizeSearchText(f.source))) return false;
@@ -249,6 +315,8 @@ function applyFilters(listings) {
 function sortListings(listings) {
   const sort = $('#sortFilter')?.value || 'newest';
   return [...listings].sort((a, b) => {
+    if (!a.endDate && b.endDate) return 1;
+    if (a.endDate && !b.endDate) return -1;
     if (sort === 'institution') return (a.institution || '').localeCompare(b.institution || '', 'tr');
     if (sort === 'deadline') return (a.endDate || '9999-12-31').localeCompare(b.endDate || '9999-12-31');
     return (b.publishedAt || '').localeCompare(a.publishedAt || '');
@@ -258,11 +326,16 @@ function sortListings(listings) {
 function renderListings() {
   const filtered = sortListings(applyFilters(state.listings));
   $('#listingCount').textContent = `${filtered.length} kayıt`;
-  $('#resultSummary').textContent = state.listings.length
-    ? `${filtered.length} ilan gösteriliyor.`
-    : 'Canlı ilan kaynağı henüz bağlanmadı.';
+  $('#resultSummary').textContent = state.apiStatus === 'loading' ? 'İlanlar yükleniyor…'
+    : state.apiStatus === 'error' ? 'API bağlantı hatası.'
+    : state.listings.length ? `${filtered.length} ilan gösteriliyor.` : 'Kaynaklardan ilan bekleniyor.';
   if (!state.listings.length) {
-    $('#listingResults').innerHTML = `<div class="listing-placeholder"><div class="empty-icon">⌕</div><strong>Henüz doğrulanmış ilan bulunmuyor</strong><p>MemurPro, resmî kaynaklardan veri bağlantıları tamamlanmadan ilan uydurmaz veya eski ilanları güncelmiş gibi göstermez. Kaynaklar bağlandığında arama ve filtreler burada çalışacak.</p><button class="button button-outline" data-go="overview">Kaynak durumunu gör</button></div>`;
+    const message = state.apiStatus === 'error'
+      ? `<strong>İlan verileri alınamadı</strong><p>${escapeHTML(state.apiError || 'API bağlantısı kurulamadı. Biraz sonra tekrar dene.')}</p>`
+      : state.apiStatus === 'loading'
+        ? '<strong>İlanlar yükleniyor</strong><p>Resmî kaynaklardan alınan kayıtlar getiriliyor.</p>'
+        : '<strong>Henüz doğrulanmış ilan bulunmuyor</strong><p>Kaynaklardan yeni kayıt geldiğinde burada gösterilecek.</p>';
+    $('#listingResults').innerHTML = `<div class="listing-placeholder"><div class="empty-icon">⌕</div>${message}<button class="button button-outline" data-go="overview">Kaynak durumunu gör</button></div>`;
     return;
   }
   $('#listingResults').innerHTML = filtered.length ? filtered.map(listingCard).join('') : `<div class="listing-placeholder"><strong>Bu kriterlerle eşleşen ilan yok</strong><p>Filtrelerini değiştirerek yeniden deneyebilirsin.</p></div>`;
@@ -581,26 +654,26 @@ function renderSaved() {
 }
 
 async function loadLiveData() {
+  state.apiStatus = 'loading'; state.apiError = ''; renderListings();
   try {
     const apiBase = String(window.MEMURPRO_API_BASE || '').replace(/\/$/, '');
-    if (!apiBase) return null; // GitHub Pages tek başına kullanılıyorsa API çağrısı yapma.
+    if (!apiBase) throw new Error('API adresi config.js içinde tanımlı değil.');
     const response = await fetch(`${apiBase}/api/listings?limit=500`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
-    if (!response.ok) throw new Error(`API ${response.status}`);
+    if (!response.ok) throw new Error(`API HTTP ${response.status}`);
     const payload = await response.json();
-    if (!Array.isArray(payload.listings)) throw new Error('Beklenmeyen API yanıtı');
+    if (!Array.isArray(payload.listings)) throw new Error('API beklenen ilan listesini döndürmedi.');
+    state.apiStatus = 'ready';
     state.listings = payload.listings;
     updateCityFilter();
     state.sources = Array.isArray(payload.sources) ? payload.sources : state.sources;
     updateSourceFilter();
-    renderListings();
-    renderLatestListings();
-    updateLiveNotice();
-    renderMatchedListings();
+    renderListings(); renderLatestListings(); updateLiveNotice(); renderMatchedListings();
     if (state.view === 'saved') renderSaved();
     if (payload.sources) renderSourceStatuses(payload.sources);
     return payload;
-  } catch {
-    // API yoksa uygulama kontrollü ön izleme durumunda kalır; sahte ilan eklenmez.
+  } catch (error) {
+    state.apiStatus = 'error'; state.apiError = error?.message || 'Bilinmeyen bağlantı hatası';
+    renderListings(); renderLatestListings();
     return null;
   }
 }
@@ -608,6 +681,8 @@ async function loadLiveData() {
 function renderSourceStatuses(sources) {
   state.sources = Array.isArray(sources) ? sources : [];
   updateSourceFilter();
+  const countBadge = $('.source-total');
+  if (countBadge) countBadge.textContent = `${sources.length} kaynak`;
   const footnote = $('#sourceAutomationStatus');
   if (footnote) {
     const checked = sources.map(source => source.checkedAt).filter(Boolean).map(value => new Date(value)).filter(date => !Number.isNaN(date.getTime())).sort((a, b) => b - a)[0];
@@ -629,13 +704,21 @@ function renderSourceStatuses(sources) {
     if (!source) return;
     const stateEl = $('.source-state', row);
     if (!stateEl) return;
-    const labels = { connected: 'Bağlı', degraded: 'Site açık · akış hatalı', pending: 'İlk kontrol bekleniyor', failed: 'Erişim hatası' };
+    const errorText = String(source.lastError || '');
+    const zeroItems = source.status === 'connected' && Number(source.latestItemCount) === 0;
+    const labels = {
+      connected: zeroItems ? 'Başarılı · 0 ilan' : `Başarılı · ${Number(source.latestItemCount || 0)} ilan`,
+      degraded: /HTTP 403|403/.test(errorText) ? 'Erişim engeli · HTTP 403' : /HTTP 406|406/.test(errorText) ? 'Erişim engeli · HTTP 406' : 'Site açık · veri akışı hatalı',
+      pending: 'Kontrol bekleniyor',
+      failed: /HTTP 403|403/.test(errorText) ? 'Erişim engeli · HTTP 403' : /HTTP 406|406/.test(errorText) ? 'Erişim engeli · HTTP 406' : 'Kaynağa erişilemiyor'
+    };
     stateEl.textContent = labels[source.status] || 'Durum bilinmiyor';
     stateEl.className = `source-state ${source.status || 'pending'}`;
     const detailEl = $('.source-copy small', row);
     const details = [];
     if (source.lastError) details.push(source.lastError);
     else if (source.checkedAt) details.push(`Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`);
+    if (source.latestItemCount !== null && source.latestItemCount !== undefined) details.push(`Son kontrolde ${source.latestItemCount} ilan`);
     else details.push('İlk başarılı veri aktarımı bekleniyor.');
     if (source.lastSuccessAt) details.push(`Son başarılı: ${new Date(source.lastSuccessAt).toLocaleString('tr-TR')}`);
     if (source.successRate24h !== null && source.successRate24h !== undefined) details.push(`24 saat başarı: ${source.successRate24h}% (${source.successes24h}/${source.checks24h})`);
@@ -656,8 +739,11 @@ function bindFilters() {
     city: $('#cityFilter').value,
     education: $('#educationFilter').value,
     score: $('#scoreFilter').value,
-    type: $('#typeFilter').value,
-    source: $('#sourceFilter').value
+    employmentType: $('#employmentTypeFilter')?.value || '',
+    institutionType: $('#institutionTypeFilter')?.value || '',
+    announcementType: $('#announcementTypeFilter')?.value || '',
+    source: $('#sourceFilter').value,
+    openOnly: $('#openOnlyFilter')?.checked ?? true
   };
   renderListings();
 }
@@ -807,13 +893,37 @@ function openListingDetails(id) {
   dialog.showModal();
 }
 
+function exportBackup() {
+  const payload = { app: 'MemurPro', version: 1, exportedAt: new Date().toISOString(), saved: state.saved, tracking: state.tracking, profile: state.profile };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob); const link = document.createElement('a');
+  link.href = url; link.download = `memurpro-yedek-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  showToast('Takip listesi ve aday profilin yedeklendi.');
+}
+
+async function importBackup(file) {
+  if (file.size > 2 * 1024 * 1024) return showToast('Yedek dosyası 2 MB sınırını aşıyor.');
+  try {
+    const data = JSON.parse(await file.text());
+    if (data?.app !== 'MemurPro' || data?.version !== 1 || !Array.isArray(data.saved) || !data.tracking || typeof data.tracking !== 'object') throw new Error('Bu dosya geçerli bir MemurPro yedeği değil.');
+    const saved = data.saved.filter(item => item && typeof item.id === 'string' && typeof item.title === 'string').slice(0, 2000);
+    const tracking = Object.fromEntries(Object.entries(data.tracking).filter(([id,value]) => saved.some(item => item.id === id) && value && typeof value === 'object'));
+    state.saved = saved; state.tracking = tracking; state.profile = data.profile && typeof data.profile === 'object' ? data.profile : null;
+    localStorage.setItem(STORAGE_KEYS.saved, JSON.stringify(state.saved)); localStorage.setItem(STORAGE_KEYS.tracking, JSON.stringify(state.tracking)); localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(state.profile));
+    updateSavedCount(); populateProfile(); renderSaved(); renderMatchedListings();
+    showToast(`${saved.length} takip kaydı yedekten geri yüklendi.`);
+  } catch (error) { showToast(error?.message || 'Yedek dosyası okunamadı.'); }
+}
+
 function bindEvents() {
   $$('.nav-link, .mobile-nav-link').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
   $$('[data-go]').forEach(button => button.addEventListener('click', () => setView(button.dataset.go)));
   $$('[data-filter-category]').forEach(button => button.addEventListener('click', () => {
     setView('listings');
     const category = button.dataset.filterCategory;
-    $('#typeFilter').value = category;
+    if (category === 'KPSS') $('#announcementTypeFilter').value = 'KPSS tercih / yerleştirme';
+    else $('#employmentTypeFilter').value = category === 'Sözleşmeli' ? 'Sözleşmeli personel' : category;
     bindFilters();
   }));
   $('#applyFilters').addEventListener('click', bindFilters);
@@ -821,9 +931,20 @@ function bindEvents() {
   $('#departmentFilter')?.addEventListener('input', bindFilters);
   $('#searchInput').addEventListener('keydown', event => { if (event.key === 'Enter') bindFilters(); });
   $('#sortFilter').addEventListener('change', renderListings);
-  $('#sourceFilter')?.addEventListener('change', bindFilters);
+  ['sourceFilter','cityFilter','educationFilter','scoreFilter','employmentTypeFilter','institutionTypeFilter','announcementTypeFilter','openOnlyFilter'].forEach(id => $(`#${id}`)?.addEventListener('change', bindFilters));
+  $('#educationFilter')?.addEventListener('change', () => {
+    const mapping = { 'Ön lisans': 'P93', 'Lisans': 'P3', 'Ortaöğretim': 'P94' };
+    const score = $('#scoreFilter');
+    if (score && mapping[$('#educationFilter').value] && (!score.value || score.dataset.autoSuggested === 'true')) {
+      score.value = mapping[$('#educationFilter').value]; score.dataset.autoSuggested = 'true';
+    }
+    bindFilters();
+  });
+  $('#scoreFilter')?.addEventListener('change', event => { event.target.dataset.autoSuggested = 'false'; bindFilters(); });
   $('#clearFilters').addEventListener('click', () => {
-    ['searchInput','departmentFilter','cityFilter','educationFilter','scoreFilter','typeFilter','sourceFilter'].forEach(id => { $(`#${id}`).value = ''; });
+    ['searchInput','departmentFilter','cityFilter','educationFilter','scoreFilter','employmentTypeFilter','institutionTypeFilter','announcementTypeFilter','sourceFilter'].forEach(id => { if ($(`#${id}`)) $(`#${id}`).value = ''; });
+    if ($('#openOnlyFilter')) $('#openOnlyFilter').checked = true;
+    if ($('#scoreFilter')) $('#scoreFilter').dataset.autoSuggested = 'false';
     bindFilters();
   });
   document.addEventListener('change', event => {
@@ -896,6 +1017,9 @@ function bindEvents() {
   $('#profileButton').addEventListener('click', showProfileTool);
   $('#editMatchProfile')?.addEventListener('click', showProfileTool);
   $('#refreshSources')?.addEventListener('click', refreshSources);
+  $('#exportBackup')?.addEventListener('click', exportBackup);
+  $('#importBackupTrigger')?.addEventListener('click', () => $('#backupFile')?.click());
+  $('#backupFile')?.addEventListener('change', event => { const file = event.target.files?.[0]; if (file) importBackup(file); event.target.value = ''; });
 }
 
 function init() {
