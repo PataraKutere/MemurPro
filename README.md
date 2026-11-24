@@ -112,7 +112,7 @@ GitHub-hosted Linux runner bazı resmî sitelerde IP tabanlı HTTP 403/406 engel
 
 Runner henüz kayıtlı değilse `self-hosted` seçme; iş sırada bekler. Bu runner depo koduna ve Actions secret'larına erişebileceği için yalnızca kendi kontrolündeki güvenilir bilgisayarda kurulmalıdır. Kurulum sırasında GitHub'ın verdiği geçici kayıt token'ını kimseyle paylaşma.
 
-Varsayılan seçenek hâlâ `github-hosted` olarak kalır. Yerel runner zorunlu değildir; yalnızca erişim engeli yaşayan kaynakları ev interneti üzerinden kontrol etmek için kullanılabilir.
+Varsayılan seçenek hâlâ `github-hosted` olarak kalır. `self-hosted` seçildiğinde normal kontrol aralığı ve hata backoff süresi de atlanır; böylece kaynaklar ev internetinden hemen yeniden denenir. Yerel runner zorunlu değildir; yalnızca erişim engeli yaşayan kaynakları ev interneti üzerinden kontrol etmek için kullanılabilir.
 
 ## Yerel geliştirme
 
