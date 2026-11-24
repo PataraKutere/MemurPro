@@ -442,6 +442,9 @@ async function fetchSbb(source) {
 }
 
 async function fetchFeed(source) {
+  if (source.id === 'iskur' && !source.feed_url) {
+    return { skipped: true, reason: 'İŞKUR iş arama hizmeti giriş gerektiriyor; doğrulanmış, herkese açık ve kimlik doğrulamasız ilan akışı bulunamadı.' };
+  }
   if (source.adapter === 'ilan-gov') {
     return { items: await fetchIlanGov(source) };
   }
@@ -543,7 +546,7 @@ async function syncOneSource(source, env) {
 }
 
 async function syncConfiguredSources(env) {
-  const result = await env.DB.prepare(`SELECT id, name, homepage_url, feed_url, feed_type, adapter, enabled, last_checked_at FROM sources WHERE enabled=1`).all();
+  const result = await env.DB.prepare(`SELECT id, name, homepage_url, feed_url, feed_type, adapter, enabled, last_checked_at, status FROM sources WHERE enabled=1`).all();
   const sources = result.results || [];
   const outcomes = [];
   const minIntervals = {
@@ -555,17 +558,26 @@ async function syncConfiguredSources(env) {
     'iskur': 60 * 60 * 1000
   };
   const now = Date.now();
-  // Check sources one at a time and respect per-source minimum polling intervals.
   for (const source of sources) {
     const lastChecked = source.last_checked_at ? Date.parse(source.last_checked_at) : NaN;
     const minInterval = minIntervals[source.id] || 60 * 60 * 1000;
-    if (Number.isFinite(lastChecked) && now - lastChecked < minInterval) {
+    const nowIso = new Date(now).toISOString();
+    const cutoffIso = new Date(now - minInterval).toISOString();
+
+    // Atomic claim: prevents a visitor button and Cron from polling the same source together.
+    const claim = await env.DB.prepare(`
+      UPDATE sources
+      SET last_checked_at=?, status='pending', last_error='Kontrol ediliyor.'
+      WHERE id=? AND (last_checked_at IS NULL OR last_checked_at<=?)
+    `).bind(nowIso, source.id, cutoffIso).run();
+
+    if (!claim.meta || claim.meta.changes === 0) {
       outcomes.push({
         source: source.name,
         status: source.status,
         imported: 0,
         skipped: true,
-        message: 'Kaynağın kontrol aralığı dolmadı; gereksiz istek gönderilmedi.'
+        message: Number.isFinite(lastChecked) ? 'Kaynağın kontrol aralığı dolmadı.' : 'Kaynak başka bir işlem tarafından kontrol ediliyor.'
       });
       continue;
     }
@@ -575,7 +587,7 @@ async function syncConfiguredSources(env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (!env.DB) return json({ error: 'D1 veritabanı bağlantısı yapılandırılmamış.' }, 503);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': ALLOWED_METHODS, 'access-control-allow-headers': 'content-type,x-admin-token' } });
     const url = new URL(request.url);
@@ -589,6 +601,13 @@ export default {
       if (request.method === 'GET' && url.pathname === '/api/listings') {
         const [listings, sources] = await Promise.all([getListings(request, env), getSources(env)]);
         return json({ listings, sources, updatedAt: new Date().toISOString() }, 200, { 'cache-control': 'public, max-age=60' });
+      }
+      if (request.method === 'POST' && url.pathname === '/api/sync-now') {
+        if (ctx && typeof ctx.waitUntil === 'function') {
+          ctx.waitUntil(syncConfiguredSources(env).catch(error => console.error('MemurPro manual sync failed:', error)));
+          return json({ ok: true, queued: true, message: 'Kaynak kontrolü başlatıldı. Sonuçlar kaynak durumlarına yansıyacak.' }, 202);
+        }
+        return json({ results: await syncConfiguredSources(env) });
       }
       if (request.method === 'POST' && url.pathname === '/api/admin/sync') {
         if (!env.ADMIN_TOKEN || request.headers.get('x-admin-token') !== env.ADMIN_TOKEN) return json({ error: 'Yetkisiz işlem.' }, 401);
