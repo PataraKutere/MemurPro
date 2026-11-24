@@ -638,7 +638,25 @@ SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-
 def report(sid,items=None,error=None):
     if not TOKEN: raise RuntimeError("MEMURPRO_INGEST_TOKEN secret is missing")
     r=requests.post(API+"/api/ingest",headers={"x-admin-token":TOKEN},json={"sourceId":sid,"items":items or [],"error":error},timeout=30); r.raise_for_status(); return r.json()
+def verify_api_security():
+    allowed_origin="https://patarakutere.github.io"
+    allowed=S.get(API+"/api/health",timeout=12,headers={"Origin":allowed_origin})
+    if allowed.status_code!=200 or allowed.headers.get("access-control-allow-origin")!=allowed_origin:
+        raise RuntimeError(f"API CORS izinli alan adı testi başarısız: HTTP {allowed.status_code}")
+    denied=S.get(API+"/api/health",timeout=12,headers={"Origin":"https://memurpro-invalid-origin.example"})
+    if denied.status_code!=403:
+        raise RuntimeError(f"API CORS yabancı alan adı engeli başarısız: HTTP {denied.status_code}")
+    ingest=S.post(API+"/api/ingest",json={},timeout=12,headers={"x-admin-token":"invalid-test-token"})
+    if ingest.status_code!=401:
+        raise RuntimeError(f"/api/ingest token kontrolü başarısız: HTTP {ingest.status_code}")
+    admin=S.post(API+"/api/admin/sync",json={},timeout=12,headers={"x-admin-token":"invalid-test-token"})
+    if admin.status_code!=401:
+        raise RuntimeError(f"/api/admin/sync token kontrolü başarısız: HTTP {admin.status_code}")
+    print("API güvenlik testi OK: CORS allow/deny, ingest token ve admin token doğrulandı.")
+
 def main():
+    if not TOKEN: raise SystemExit("MEMURPRO_INGEST_TOKEN tanımlı değil.")
+    verify_api_security()
     r=S.get(API+"/api/sources",timeout=20); r.raise_for_status(); sources={x["id"]:x for x in r.json().get("sources",[])}
     now=datetime.now(timezone.utc); results=[]; dry=os.environ.get("COLLECTOR_DRY_RUN")=="1"
     force=os.environ.get("COLLECTOR_FORCE")=="1"
