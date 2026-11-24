@@ -75,7 +75,16 @@ INSERT OR IGNORE INTO sources (id, name, homepage_url, feed_type, status) VALUES
   ('iskur', 'İŞKUR', 'https://www.iskur.gov.tr/', 'manual', 'pending'),
   ('ilan-gov', 'İlan.gov.tr', 'https://www.ilan.gov.tr/', 'manual', 'pending'),
   ('resmi-gazete', 'Resmî Gazete', 'https://www.resmigazete.gov.tr/', 'manual', 'pending'),
-  ('kamuilan-sbb', 'Kamu İlanları (SBB)', 'https://kamuilan.sbb.gov.tr/', 'manual', 'pending');
+  ('kamuilan-sbb', 'Kamu İlanları (SBB)', 'https://kamuilan.sbb.gov.tr/', 'manual', 'pending'),
+  ('iskur-kamu-memur', 'İŞKUR Kamu Memur Alımları (İstanbul)', 'https://www.iskur.gov.tr/ilanlar/kamu-memur-alim-ilanlari/?idId=istanbul&il=%C4%B0stanbul', 'manual', 'pending'),
+  ('sbb-kurum-duyurulari', 'SBB Kurum Duyuruları', 'https://www.sbb.gov.tr/tumu/', 'manual', 'pending');
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_announcements_dedupe_hash ON announcements(dedupe_hash) WHERE dedupe_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_sources_backoff ON sources(backoff_until);
+
+CREATE TABLE IF NOT EXISTS api_rate_limits (
+  bucket TEXT PRIMARY KEY,
+  hits INTEGER NOT NULL DEFAULT 0,
+  window_started_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_api_rate_limits_window ON api_rate_limits(window_started_at);
