@@ -157,3 +157,18 @@ body{background:#0d1523;color:#e4eaf4}
 .eligibility-result.ineligible>strong{color:#f09b98}
 .eligibility-result.unknown{border-color:#655337;background:#302a20}
 .eligibility-result.unknown>strong{color:#e9c47e}
+
+
+/* Compact, readable listing summaries */
+.listing-card{align-items:start}
+.listing-main{min-width:0}
+.listing-card h3{font-size:15px;line-height:1.45;color:#e8edf7;margin:7px 0 13px}
+.listing-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:0 0 11px}
+.listing-fact{min-width:0;padding:10px 11px;border:1px solid #2d3c53;border-radius:9px;background:#111c2b}
+.listing-fact span{display:block;margin-bottom:5px;color:#8fa0b8;font-size:9px;font-weight:700}
+.listing-fact strong{display:block;color:#dce5f3;font-size:10px;line-height:1.5;font-weight:600;overflow-wrap:anywhere}
+.listing-card .listing-summary{font-size:10px;color:#aab8ca;line-height:1.65;margin:8px 0}
+.listing-card .listing-meta{align-items:center}
+.listing-card .listing-status{white-space:nowrap}
+@media(max-width:850px){.listing-facts{grid-template-columns:1fr 1fr}.listing-fact:first-child{grid-column:1/-1}}
+@media(max-width:620px){.listing-facts{grid-template-columns:1fr;gap:7px}.listing-fact:first-child{grid-column:auto}.listing-card h3{font-size:14px}.listing-fact{padding:9px 10px}.listing-actions{justify-content:flex-start}}
