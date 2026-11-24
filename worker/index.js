@@ -129,8 +129,137 @@ async function hashText(text) {
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
+
+function normalizeIngestItem(item, source) {
+  const title = safeText(item?.title, 500);
+  const institution = safeText(item?.institution, 500);
+  const detailUrl = safeText(item?.detailUrl || item?.url, 2000);
+  if (!title || !detailUrl) return null;
+  let parsed;
+  try { parsed = new URL(detailUrl); } catch { return null; }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+  const endDate = normalizeDateOnly(item.endDate);
+  const startDate = normalizeDateOnly(item.startDate);
+  const today = new Date().toISOString().slice(0, 10);
+  const explicitOpen = item.status === 'open' && Boolean(endDate) && endDate >= today && (!startDate || startDate <= today);
+  const status = endDate && endDate < today ? 'closed' : explicitOpen ? 'open' : 'check_required';
+  const positionCount = Number.isInteger(Number(item.positionCount)) && Number(item.positionCount) > 0 ? Number(item.positionCount) : null;
+  return {
+    externalId: safeText(item.externalId || item.id || detailUrl, 2000),
+    title,
+    institution: institution || source.name,
+    summary: safeText(item.summary, 4000),
+    category: safeText(item.category || 'Kamu ilanı', 100),
+    city: safeText(item.city, 100),
+    education: safeText(item.education, 200),
+    scoreType: safeText(item.scoreType, 50),
+    minimumScore: Number.isFinite(Number(item.minimumScore)) && item.minimumScore !== null && item.minimumScore !== '' ? Number(item.minimumScore) : null,
+    publishedAt: normalizeDate(item.publishedAt),
+    startDate,
+    endDate,
+    detailUrl: parsed.toString(),
+    sourceName: source.name,
+    status,
+    positionCount
+  };
+}
+
+async function ingestBatch(request, env) {
+  if (!env.ADMIN_TOKEN || request.headers.get('x-admin-token') !== env.ADMIN_TOKEN) {
+    return json({ error: 'Yetkisiz işlem.' }, 401);
+  }
+  const raw = await request.text();
+  if (raw.length > 1_000_000) return json({ error: 'İstek gövdesi 1 MB sınırını aşıyor.' }, 413);
+  let payload;
+  try { payload = JSON.parse(raw); } catch { return json({ error: 'Geçersiz JSON.' }, 400); }
+  const sourceId = safeText(payload.sourceId, 80);
+  if (!sourceId) return json({ error: 'sourceId zorunludur.' }, 400);
+  const sourceResult = await env.DB.prepare('SELECT id, name FROM sources WHERE id=? AND enabled=1').bind(sourceId).first();
+  if (!sourceResult) return json({ error: 'Kaynak bulunamadı veya devre dışı.' }, 404);
+  const now = new Date().toISOString();
+
+  if (payload.error) {
+    const message = safeText(payload.error, 500);
+    const current = await env.DB.prepare('SELECT failure_count FROM sources WHERE id=?').bind(sourceId).first();
+    const failures = Number(current?.failure_count || 0) + 1;
+    const backoffMinutes = failures >= 3 ? Math.min(30 * (2 ** Math.min(failures - 3, 3)), 240) : 0;
+    const backoffUntil = backoffMinutes ? new Date(Date.now() + backoffMinutes * 60000).toISOString() : null;
+    await env.DB.prepare("UPDATE sources SET status='failed', failure_count=?, backoff_until=?, last_checked_at=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+      .bind(failures, backoffUntil, now, message, sourceId).run();
+    return json({ ok: true, sourceId, status: 'failed', failureCount: failures, backoffUntil, imported: 0 });
+  }
+
+  if (!Array.isArray(payload.items) || payload.items.length > 250) {
+    return json({ error: 'items alanı en fazla 250 kayıt içeren bir dizi olmalıdır.' }, 400);
+  }
+
+  let imported = 0;
+  let rejected = 0;
+  for (const rawItem of payload.items) {
+    const item = normalizeIngestItem(rawItem, sourceResult);
+    if (!item) { rejected++; continue; }
+    const dedupeInput = [
+      item.institution.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9çğıöşü]+/g, ' ').trim(),
+      item.title.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9çğıöşü]+/g, ' ').trim(),
+      item.endDate || '',
+      item.positionCount ?? ''
+    ].join('|');
+    const dedupeHash = item.endDate ? await hashText(dedupeInput) : null;
+    const id = sourceId + '-' + (await hashText(item.externalId)).slice(0, 24);
+    const sourceRef = { sourceId, sourceName: sourceResult.name, url: item.detailUrl };
+    const existing = dedupeHash
+      ? await env.DB.prepare('SELECT id, source_refs, source_name FROM announcements WHERE dedupe_hash=? LIMIT 1').bind(dedupeHash).first()
+      : null;
+
+    if (existing) {
+      let refs = [];
+      try { refs = JSON.parse(existing.source_refs || '[]'); } catch {}
+      if (!refs.some(ref => ref.sourceId === sourceId)) refs.push(sourceRef);
+      const names = [...new Set([...(existing.source_name || '').split(' · ').filter(Boolean), sourceResult.name])].join(' · ');
+      await env.DB.prepare(`UPDATE announcements SET source_refs=?, source_name=?, updated_at=CURRENT_TIMESTAMP,
+        last_verified_at=?, status=CASE WHEN end_date IS NOT NULL AND end_date < ? THEN 'closed' ELSE status END
+        WHERE id=?`)
+        .bind(JSON.stringify(refs), names, now, now.slice(0, 10), existing.id).run();
+      imported++;
+      continue;
+    }
+
+    const refs = JSON.stringify([sourceRef]);
+    await env.DB.prepare(`
+      INSERT INTO announcements (
+        id, source_id, external_id, title, institution, summary, category, city, education,
+        score_type, minimum_score, published_at, start_date, end_date, detail_url, source_name,
+        status, content_hash, last_verified_at, dedupe_hash, source_refs, publication_state,
+        position_count, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(source_id, external_id) DO UPDATE SET
+        title=excluded.title, institution=excluded.institution, summary=excluded.summary,
+        category=excluded.category, city=excluded.city, education=excluded.education,
+        score_type=excluded.score_type, minimum_score=excluded.minimum_score,
+        published_at=excluded.published_at, start_date=excluded.start_date, end_date=excluded.end_date,
+        detail_url=excluded.detail_url, source_name=excluded.source_name, status=excluded.status,
+        content_hash=excluded.content_hash, last_verified_at=excluded.last_verified_at,
+        dedupe_hash=COALESCE(excluded.dedupe_hash, announcements.dedupe_hash),
+        source_refs=excluded.source_refs, publication_state=excluded.publication_state,
+        position_count=excluded.position_count, updated_at=CURRENT_TIMESTAMP
+    `).bind(
+      id, sourceId, item.externalId, item.title, item.institution, item.summary || null,
+      item.category, item.city || null, item.education || null, item.scoreType || null,
+      item.minimumScore, item.publishedAt || null, item.startDate, item.endDate,
+      item.detailUrl, sourceResult.name, item.status, await hashText(JSON.stringify(item)),
+      now, dedupeHash, refs, item.status === 'open' ? 'published' : item.status === 'closed' ? 'expired' : 'draft',
+      item.positionCount
+    ).run();
+    imported++;
+  }
+
+  await env.DB.prepare("UPDATE sources SET status='connected', failure_count=0, backoff_until=NULL, last_checked_at=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+    .bind(now, sourceId).run();
+  return json({ ok: true, sourceId, status: 'connected', imported, rejected, checkedAt: now });
+}
+
 async function getSources(env) {
-  const result = await env.DB.prepare(`SELECT id, name, homepage_url AS homepageUrl, feed_type AS feedType, adapter, status, last_checked_at AS checkedAt, last_error AS lastError FROM sources ORDER BY name`).all();
+  const result = await env.DB.prepare(`SELECT id, name, homepage_url AS homepageUrl, feed_type AS feedType, adapter, status, last_checked_at AS checkedAt, last_error AS lastError, failure_count AS failureCount, backoff_until AS backoffUntil FROM sources ORDER BY name`).all();
   return result.results || [];
 }
 
@@ -815,6 +944,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': ALLOWED_METHODS, 'access-control-allow-headers': 'content-type,x-admin-token' } });
     const url = new URL(request.url);
     try {
+      if (request.method === 'POST' && url.pathname === '/api/ingest') return await ingestBatch(request, env);
       if (request.method === 'GET' && url.pathname === '/api/health') {
         return json({ ok: true, service: 'MemurPro API', time: new Date().toISOString() });
       }
