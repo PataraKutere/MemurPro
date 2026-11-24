@@ -9,10 +9,11 @@ const STORAGE_KEYS = {
 const state = {
   view: 'overview',
   listings: [],
+  sources: [],
   saved: readJSON(STORAGE_KEYS.saved, []),
   profile: readJSON(STORAGE_KEYS.profile, null),
   tracking: readJSON(STORAGE_KEYS.tracking, {}),
-  filters: { q: '', city: '', education: '', score: '', type: '' }
+  filters: { q: '', city: '', education: '', score: '', type: '', source: '' }
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -148,6 +149,38 @@ function listingCard(listing) {
   </article>`;
 }
 
+function updateSourceFilter() {
+  const select = $('#sourceFilter');
+  if (!select) return;
+  const selected = select.value || state.filters.source || '';
+  const names = new Map();
+  state.sources.forEach(source => {
+    if (source?.name) names.set(String(source.name), source);
+  });
+  state.listings.forEach(item => {
+    if (item?.sourceName && !names.has(String(item.sourceName))) names.set(String(item.sourceName), null);
+  });
+  const counts = new Map();
+  state.listings.forEach(item => {
+    const name = String(item.sourceName || '');
+    if (name) counts.set(name, (counts.get(name) || 0) + 1);
+  });
+  const options = [...names.entries()].sort((a,b) => a[0].localeCompare(b[0], 'tr'));
+  select.innerHTML = '<option value="">Tüm kaynaklar</option>' + options.map(([name, source]) => {
+    const count = counts.get(name) || 0;
+    const status = source?.status === 'connected' ? ' · bağlantı aktif' :
+      source?.status === 'degraded' ? ' · kısmi sorun' :
+      source?.status === 'failed' ? ' · erişilemiyor' :
+      source?.status === 'pending' ? ' · beklemede' : '';
+    return '<option value="' + escapeHTML(name) + '">' + escapeHTML(name) + ' (' + count + ' ilan' + status + ')</option>';
+  }).join('');
+  if ([...select.options].some(option => option.value === selected)) select.value = selected;
+  else if (selected) {
+    state.filters.source = '';
+    select.value = '';
+  }
+}
+
 function applyFilters(listings) {
   const f = state.filters;
   return listings.filter(item => {
@@ -156,7 +189,8 @@ function applyFilters(listings) {
     if (f.city && item.city !== f.city && item.city !== 'Türkiye Geneli') return false;
     if (f.education && item.education !== f.education) return false;
     if (f.score && item.scoreType !== f.score) return false;
-    if (f.type && item.category !== f.type && item.category !== f.type) return false;
+    if (f.type && item.category !== f.type) return false;
+    if (f.source && String(item.sourceName || '').toLocaleLowerCase('tr-TR') !== f.source.toLocaleLowerCase('tr-TR')) return false;
     return true;
   });
 }
@@ -455,6 +489,8 @@ async function loadLiveData() {
     const payload = await response.json();
     if (!Array.isArray(payload.listings)) throw new Error('Beklenmeyen API yanıtı');
     state.listings = payload.listings;
+    state.sources = Array.isArray(payload.sources) ? payload.sources : state.sources;
+    updateSourceFilter();
     renderListings();
     renderMatchedListings();
     if (state.view === 'saved') renderSaved();
@@ -467,6 +503,8 @@ async function loadLiveData() {
 }
 
 function renderSourceStatuses(sources) {
+  state.sources = Array.isArray(sources) ? sources : [];
+  updateSourceFilter();
   const footnote = $('#sourceAutomationStatus');
   if (footnote) {
     const checked = sources.map(source => source.checkedAt).filter(Boolean).map(value => new Date(value)).filter(date => !Number.isNaN(date.getTime())).sort((a, b) => b - a)[0];
@@ -511,7 +549,8 @@ function bindFilters() {
     city: $('#cityFilter').value,
     education: $('#educationFilter').value,
     score: $('#scoreFilter').value,
-    type: $('#typeFilter').value
+    type: $('#typeFilter').value,
+    source: $('#sourceFilter').value
   };
   renderListings();
 }
@@ -669,8 +708,9 @@ function bindEvents() {
   $('#applyFilters').addEventListener('click', bindFilters);
   $('#searchInput').addEventListener('keydown', event => { if (event.key === 'Enter') bindFilters(); });
   $('#sortFilter').addEventListener('change', renderListings);
+  $('#sourceFilter')?.addEventListener('change', bindFilters);
   $('#clearFilters').addEventListener('click', () => {
-    ['searchInput','cityFilter','educationFilter','scoreFilter','typeFilter'].forEach(id => { $(`#${id}`).value = ''; });
+    ['searchInput','cityFilter','educationFilter','scoreFilter','typeFilter','sourceFilter'].forEach(id => { $(`#${id}`).value = ''; });
     bindFilters();
   });
   document.addEventListener('change', event => {
