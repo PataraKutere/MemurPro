@@ -13,7 +13,7 @@
 
 ## Önemli: canlı ilan durumu
 
-Bu sürümde Cloudflare Worker ve D1 veritabanı kuruldu. ÖSYM'nin herkese açık KPSS duyuru sayfası için HTML adaptörü, Kariyer Kapısı'nın kamuya açık JSON ilan listesi için API adaptörü eklendi. Kariyer Kapısı API'si Türkiye dışındaki barındırılan sunuculardan erişim engeli uygulayabildiği için kaynak yalnızca gerçek erişim başarılı olursa bağlı görünür; erişim engelinde hata durumu gösterilir. SBB, İŞKUR ve diğer kaynaklar ayrı bağlayıcılar bekliyor.
+Bu sürümde Cloudflare Worker ve D1 veritabanı kuruldu. ÖSYM'nin kamuya açık duyuru sayfası için HTML adaptörü, Kariyer Kapısı'nın kamuya açık JSON ilan listesi için API adaptörü, İlan.gov.tr'nin Kamu-Akademik Personel API'si ve SBB portalının liste sayfası adaptörü eklendi. Kariyer Kapısı, SBB ve İlan.gov.tr kaynakları erişim kısıtları uygulayabilir. Worker gerçek istek başarılı olursa kaynağı bağlı, başarısız olursa hata olarak işaretler. SBB'nin ilan detay/PDF bağlantıları oturuma bağlı olabildiği için MemurPro doğrudan kırılabilecek oturum URL'si yerine portal ana sayfasına yönlendirir. İŞKUR için henüz resmî, kimlik doğrulaması gerektirmeyen bir açık veri uç noktası doğrulanmadı.
 
 Resmî kaynak dizini:
 - Kariyer Kapısı: <https://kariyerkapisi.gov.tr/>
