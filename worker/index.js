@@ -186,6 +186,8 @@ async function ingestBatch(request, env) {
     const backoffUntil = backoffMinutes ? new Date(Date.now() + backoffMinutes * 60000).toISOString() : null;
     await env.DB.prepare("UPDATE sources SET status='failed', failure_count=?, backoff_until=?, last_checked_at=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
       .bind(failures, backoffUntil, now, message, sourceId).run();
+    await env.DB.prepare("INSERT INTO source_checks (source_id, checked_at, status, item_count, error) VALUES (?, ?, 'failed', 0, ?)")
+      .bind(sourceId, now, message).run();
     return json({ ok: true, sourceId, status: 'failed', failureCount: failures, backoffUntil, imported: 0 });
   }
 
@@ -204,7 +206,7 @@ async function ingestBatch(request, env) {
       item.endDate || '',
       item.positionCount ?? ''
     ].join('|');
-    const dedupeHash = item.endDate ? await hashText(dedupeInput) : null;
+    const dedupeHash = await hashText(dedupeInput);
     const id = sourceId + '-' + (await hashText(item.externalId)).slice(0, 24);
     const sourceRef = { sourceId, sourceName: sourceResult.name, url: item.detailUrl };
     const existingSourceItem = await env.DB.prepare('SELECT id FROM announcements WHERE source_id=? AND external_id=?').bind(sourceId, item.externalId).first();
@@ -273,12 +275,23 @@ async function ingestBatch(request, env) {
 
   await env.DB.prepare("UPDATE sources SET status='connected', failure_count=0, backoff_until=NULL, last_checked_at=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?")
     .bind(now, sourceId).run();
+  await env.DB.prepare("INSERT INTO source_checks (source_id, checked_at, status, item_count, error) VALUES (?, ?, 'success', ?, NULL)")
+    .bind(sourceId, now, imported).run();
   return json({ ok: true, sourceId, status: 'connected', imported, rejected, checkedAt: now });
 }
 
 async function getSources(env) {
-  const result = await env.DB.prepare(`SELECT id, name, homepage_url AS homepageUrl, feed_type AS feedType, adapter, status, last_checked_at AS checkedAt, last_error AS lastError, failure_count AS failureCount, backoff_until AS backoffUntil, enabled FROM sources ORDER BY name`).all();
-  return result.results || [];
+  const result = await env.DB.prepare(`SELECT s.id, s.name, s.homepage_url AS homepageUrl, s.feed_type AS feedType, s.adapter,
+    s.status, s.last_checked_at AS checkedAt, s.last_error AS lastError, s.failure_count AS failureCount,
+    s.backoff_until AS backoffUntil, s.enabled,
+    (SELECT COUNT(*) FROM source_checks c WHERE c.source_id=s.id AND c.checked_at >= datetime('now','-1 day')) AS checks24h,
+    (SELECT COUNT(*) FROM source_checks c WHERE c.source_id=s.id AND c.status='success' AND c.checked_at >= datetime('now','-1 day')) AS successes24h,
+    (SELECT MAX(c.checked_at) FROM source_checks c WHERE c.source_id=s.id AND c.status='success') AS lastSuccessAt
+    FROM sources s ORDER BY s.name`).all();
+  return (result.results || []).map(source => ({
+    ...source,
+    successRate24h: Number(source.checks24h) ? Math.round(Number(source.successes24h) * 100 / Number(source.checks24h)) : null
+  }));
 }
 
 async function getListings(request, env) {
