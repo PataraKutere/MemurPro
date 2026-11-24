@@ -65,4 +65,5 @@ jobs:
         env:
           MEMURPRO_API_BASE: https://memurpro-api.28berat28.workers.dev
           MEMURPRO_INGEST_TOKEN: ${{ secrets.MEMURPRO_INGEST_TOKEN }}
+          COLLECTOR_FORCE: ${{ inputs.runner == 'self-hosted' && '1' || '0' }}
         run: python collector/scrape.py
