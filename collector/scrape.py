@@ -105,13 +105,17 @@ def scrape_kariyer(browser):
         raise RuntimeError(f"İki resmî Kariyer API adresi yanıt vermedi: {last_error}")
     finally: p.close()
 
+def decode_resmi(response):
+    # Resmî Gazete's legacy announcement pages are served as Windows-1254.
+    return response.content.decode("windows-1254", errors="replace")
+
 def scrape_resmi():
     now=datetime.now(timezone.utc)+timedelta(hours=3); out=[]; read_ok=False; errors=[]
     for off in range(3):
         d=now.date()-timedelta(days=off); key=d.strftime("%Y%m%d"); index=f"https://www.resmigazete.gov.tr/fihrist?tarih={d.isoformat()}"
         try:
             r=S.get(index,timeout=12,headers={"Referer":"https://www.resmigazete.gov.tr/"}); r.raise_for_status()
-            soup=BeautifulSoup(decode(r),"html.parser")
+            soup=BeautifulSoup(decode_resmi(r),"html.parser")
             a=next((a for a in soup.find_all("a",href=True) if re.search(r"çeşitli\s+il[âa]nlar",tx(a),re.I)),None)
             candidates=[]
             if a: candidates.append(urljoin(index,a["href"]))
@@ -120,7 +124,7 @@ def scrape_resmi():
             for u in candidates:
                 page=S.get(u,timeout=12,headers={"Referer":index}); 
                 if not page.ok: errors.append(f"{d}: HTTP {page.status_code}"); print("Resmî Gazete URL erişim hatası:",u,page.status_code,file=sys.stderr); continue
-                html=decode(page); body=tx(html)
+                html=decode_resmi(page); body=tx(html)
                 has_section=bool(re.search(r"çeşitli\s+il[âa]nlar",body,re.I))
                 has_recruitment=bool(RE.search(body))
                 if not has_section and not has_recruitment:
