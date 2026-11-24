@@ -72,7 +72,9 @@ def scrape_kariyer(browser):
     def on_response(resp):
         if "/api/" in resp.url:
             if "GetIseAlimPage" in resp.url:
-                print("Kariyer XHR yanıtı:",resp.status,resp.headers.get("content-type"),resp.url,file=sys.stderr)
+                try: sample=resp.text()[:350]
+                except Exception: sample=""
+                print("Kariyer XHR yanıtı:",resp.status,resp.headers.get("content-type"),resp.url,"body:",sample,file=sys.stderr)
             try:
                 data=resp.json()
                 if isinstance(data,dict) and isinstance(data.get("searchIlan"),list):
@@ -82,7 +84,7 @@ def scrape_kariyer(browser):
     try:
         try:
             p.goto("https://kariyerkapisi.gov.tr/isealim",wait_until="domcontentloaded",timeout=15000)
-            p.wait_for_timeout(1800)
+            p.wait_for_timeout(3500)
         except Exception as exc:
             print("Kariyer sayfa açılışı:",str(exc)[:180],file=sys.stderr)
         print("Kariyer sayfası XHR adresleri:",", ".join(dict.fromkeys(api_urls[-10:])) or "XHR bulunamadı",file=sys.stderr)
@@ -93,7 +95,7 @@ def scrape_kariyer(browser):
         for endpoint in ("https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage","https://kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage"):
             try:
                 resp=p.request.post(endpoint,data=body,
-                  headers={"Referer":"https://kariyerkapisi.gov.tr/isealim","Origin":"https://kariyerkapisi.gov.tr"},
+                  headers={"Referer":"https://kariyerkapisi.gov.tr/"},
                   timeout=12000)
                 if not resp.ok: raise RuntimeError(f"Kariyer API HTTP {resp.status}")
                 payload=resp.json()
