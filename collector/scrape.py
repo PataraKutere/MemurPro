@@ -67,8 +67,12 @@ def scrape_kariyer(browser):
     def on_request(req):
         if req.resource_type in ("xhr","fetch") and "/api/" in req.url:
             api_urls.append(req.url)
+            if "GetIseAlimPage" in req.url:
+                print("Kariyer gerçek XHR:",req.method,req.url,"body:",(req.post_data or "")[:800],"headers:",{k:v for k,v in req.headers.items() if k.lower() in ("accept","content-type","origin","referer","x-requested-with")},file=sys.stderr)
     def on_response(resp):
         if "/api/" in resp.url:
+            if "GetIseAlimPage" in resp.url:
+                print("Kariyer XHR yanıtı:",resp.status,resp.headers.get("content-type"),resp.url,file=sys.stderr)
             try:
                 data=resp.json()
                 if isinstance(data,dict) and isinstance(data.get("searchIlan"),list):
