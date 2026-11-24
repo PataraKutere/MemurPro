@@ -322,6 +322,119 @@ function parseSbbItems(html, source) {
   return items.slice(0, 150);
 }
 
+
+function istanbulDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return { year: values.year, month: values.month, day: values.day };
+}
+
+function parseResmiGazeteItems(html, source, dateKey, pageUrl) {
+  const decoded = decodeHtmlEntities(String(html || '').replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' '));
+  const plainPage = xmlText(decoded);
+  const relevant = /(personel\s+al[ıi]m|memur\s+al[ıi]m|sözleşmeli\s+personel|işçi\s+al[ıi]m|öğretim\s+(?:üyesi|elemanı|görevlisi)\s+al[ıi]m|uzman\s+yardımcısı|müfettiş\s+yardımcısı|zabıta\s+memuru|itfaiye\s+eri)/i;
+  const dateLabel = dateKey.slice(6, 8) + '.' + dateKey.slice(4, 6) + '.' + dateKey.slice(0, 4);
+  const anchors = [...decoded.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)];
+  const items = [];
+  const seen = new Set();
+
+  for (const match of anchors) {
+    const attrs = match[1] || '';
+    const hrefMatch = attrs.match(/\bhref\s*=\s*["']([^"']+)["']/i);
+    if (!hrefMatch) continue;
+    let detailUrl;
+    try {
+      detailUrl = new URL(hrefMatch[1], pageUrl).toString();
+      const parsed = new URL(detailUrl);
+      if (parsed.hostname !== 'www.resmigazete.gov.tr' && parsed.hostname !== 'resmigazete.gov.tr') continue;
+    } catch { continue; }
+
+    const anchorText = xmlText(match[2]);
+    const offset = match.index || 0;
+    const context = xmlText(decoded.slice(Math.max(0, offset - 1000), Math.min(decoded.length, offset + match[0].length + 1800)));
+    const searchable = anchorText + ' ' + context;
+    if (!relevant.test(searchable)) continue;
+    if (seen.has(detailUrl)) continue;
+    seen.add(detailUrl);
+
+    const titleMatch = context.match(/(?:PERSONEL\s+AL[ıI]M[ıI]|MEMUR\s+AL[ıI]M[ıI]|SÖZLEŞMELİ\s+PERSONEL[^.]{0,100}|İŞÇİ\s+AL[ıI]M[ıI]|ÖĞRETİM\s+(?:ÜYESİ|ELEMANI|GÖREVLİSİ)\s+AL[ıI]M[ıI]|UZMAN\s+YARDIMCISI[^.]{0,100}|MÜFETTİŞ\s+YARDIMCISI[^.]{0,100}|ZABITA\s+MEMURU[^.]{0,100}|İTFAİYE\s+ERİ[^.]{0,100})/i);
+    const title = safeText(anchorText.length >= 12 && !/pdf|görüntüle|indir/i.test(anchorText) ? anchorText : (titleMatch?.[0] || context), 500);
+    const institutionMatch = context.match(/([A-ZÇĞİÖŞÜa-zçğıöşü0-9 .,'’()-]{3,140}?(?:Bakanlığından|Genel Müdürlüğünden|Başkanlığından|Rektörlüğünden|Müdürlüğünden))/i);
+    items.push({
+      externalId: detailUrl,
+      title: title || 'Resmî Gazete personel alım ilanı',
+      institution: safeText(institutionMatch?.[1] || source.name, 500),
+      summary: 'Resmî Gazete Çeşitli İlânlar bölümünde personel alımıyla ilişkili kayıt. Başvuru şartları ve tarihler için resmî belgeyi inceleyin.',
+      category: classifyPublicCategory(title),
+      publishedAt: new Date(dateKey.slice(0, 4) + '-' + dateKey.slice(4, 6) + '-' + dateKey.slice(6, 8) + 'T00:00:00+03:00').toISOString(),
+      detailUrl,
+      sourceName: source.name,
+      status: 'check_required'
+    });
+  }
+
+  if (!items.length && relevant.test(plainPage)) {
+    items.push({
+      externalId: pageUrl,
+      title: 'Resmî Gazete Çeşitli İlânlar — ' + dateLabel,
+      institution: source.name,
+      summary: 'Bu tarihin resmî Çeşitli İlânlar sayfasında personel alımıyla ilişkili ifadeler bulundu. İlan başlıklarını ve başvuru belgelerini resmî sayfadan kontrol edin.',
+      category: 'Kamu ilanı',
+      publishedAt: new Date(dateKey.slice(0, 4) + '-' + dateKey.slice(4, 6) + '-' + dateKey.slice(6, 8) + 'T00:00:00+03:00').toISOString(),
+      detailUrl: pageUrl,
+      sourceName: source.name,
+      status: 'check_required'
+    });
+  }
+  return items.slice(0, 100);
+}
+
+async function fetchResmiGazete(source) {
+  const today = istanbulDateParts();
+  const baseDate = new Date(Date.UTC(Number(today.year), Number(today.month) - 1, Number(today.day)));
+  let lastError = null;
+
+  for (let offset = 0; offset < 5; offset++) {
+    const date = new Date(baseDate.getTime() - offset * 86400000);
+    const year = String(date.getUTCFullYear());
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const dateKey = year + month + day;
+    const pageUrl = 'https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/' + year + '/' + month + '/' + dateKey + '-4.htm';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(pageUrl, {
+        signal: controller.signal,
+        headers: {
+          'user-agent': 'Mozilla/5.0 (compatible; MemurPro/0.1; official-public-announcement-monitor)',
+          'accept': 'text/html,application/xhtml+xml',
+          'accept-language': 'tr-TR,tr;q=0.9'
+        },
+        redirect: 'follow'
+      });
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error('Resmî Gazete Çeşitli İlânlar sayfası HTTP ' + response.status + ' döndürdü.');
+      const html = await response.text();
+      if (html.length > 4_000_000) throw new Error('Resmî Gazete yanıtı güvenli boyut sınırını aşıyor.');
+      const items = parseResmiGazeteItems(html, source, dateKey, pageUrl);
+      if (items.length) return items;
+      // A published daily page without personnel-related notices is a valid empty result.
+      if (/ÇEŞİTLİ\s+İL[ÂA]NLAR/i.test(xmlText(html))) return [];
+      lastError = new Error('Resmî Gazete sayfası açıldı ancak ilan bölümü ayrıştırılamadı.');
+    } catch (error) {
+      lastError = error;
+      if (offset === 0 && /HTTP 403|HTTP 401/.test(error.message)) throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  if (lastError) throw lastError;
+  throw new Error('Son 5 gün içinde Resmî Gazete Çeşitli İlânlar sayfası bulunamadı.');
+}
+
 async function fetchKariyerKapisi(source) {
   const endpoint = 'https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage';
   const requestBody = { krM_ID: 0, searchText: '', il: '0', ilanTuru: '0' };
@@ -466,6 +579,9 @@ async function fetchSbb(source) {
 }
 
 async function fetchFeed(source) {
+  if (source.id === 'resmi-gazete') {
+    return { items: await fetchResmiGazete(source) };
+  }
   if (source.id === 'iskur' && !source.feed_url) {
     return { skipped: true, reason: 'İŞKUR iş arama hizmeti giriş gerektiriyor; doğrulanmış, herkese açık ve kimlik doğrulamasız ilan akışı bulunamadı.' };
   }
