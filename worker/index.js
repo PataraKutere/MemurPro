@@ -396,43 +396,82 @@ async function fetchResmiGazete(source) {
   const baseDate = new Date(Date.UTC(Number(today.year), Number(today.month) - 1, Number(today.day)));
   let lastError = null;
 
-  // Resmî site hem www hem de kök alan adından yayın yapabiliyor.
-  // Bir host 404 döndürdüğünde aynı tarih için diğer resmî host da denenir.
+  // Önce günlük Çeşitli İlânlar dosyası, başarısız olursa Resmî Gazete'nin
+  // tarihli sayı sayfası denenir. İki adres de resmigazete.gov.tr alan adındadır.
   for (let offset = 0; offset < 5; offset++) {
     const date = new Date(baseDate.getTime() - offset * 86400000);
     const year = String(date.getUTCFullYear());
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     const day = String(date.getUTCDate()).padStart(2, '0');
     const dateKey = year + month + day;
-    const path = '/ilanlar/eskiilanlar/' + year + '/' + month + '/' + dateKey + '-4.htm';
+    const dateLabel = day + '.' + month + '.' + year;
+    const directPath = '/ilanlar/eskiilanlar/' + year + '/' + month + '/' + dateKey + '-4.htm';
+    const candidates = [
+      'https://www.resmigazete.gov.tr' + directPath,
+      'https://resmigazete.gov.tr' + directPath,
+      'https://www.resmigazete.gov.tr/' + dateLabel
+    ];
 
-    for (const host of ['https://resmigazete.gov.tr', 'https://www.resmigazete.gov.tr']) {
-      const pageUrl = host + path;
+    for (const pageUrl of candidates) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+      const timeout = setTimeout(() => controller.abort(), 22000);
       try {
         const response = await fetch(pageUrl, {
           signal: controller.signal,
           headers: {
-            'user-agent': 'Mozilla/5.0 (compatible; MemurPro/0.1; official-public-announcement-monitor)',
-            'accept': 'text/html,application/xhtml+xml',
-            'accept-language': 'tr-TR,tr;q=0.9'
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'accept-language': 'tr-TR,tr;q=0.9,en;q=0.7',
+            'cache-control': 'no-cache',
+            'referer': 'https://www.resmigazete.gov.tr/'
           },
           redirect: 'follow'
         });
         if (response.status === 404) {
-          lastError = new Error('Resmî Gazete günlük ilan sayfası bu alan adında bulunamadı (HTTP 404).');
+          lastError = new Error('Resmî Gazete günlük ilan sayfası bulunamadı (HTTP 404).');
           continue;
         }
         if (!response.ok) {
-          lastError = new Error('Resmî Gazete Çeşitli İlânlar sayfası HTTP ' + response.status + ' döndürdü.');
+          lastError = new Error('Resmî Gazete sayfası HTTP ' + response.status + ' döndürdü.');
           continue;
         }
-        const html = await response.text();
+        let html = await response.text();
         if (html.length > 4_000_000) throw new Error('Resmî Gazete yanıtı güvenli boyut sınırını aşıyor.');
+
+        // Tarihli sayı sayfası, Çeşitli İlânlar belgesine ayrı bağlantı veriyorsa
+        // bu resmî bağlantıyı takip et.
+        if (!/ÇEŞİTLİ\s+İL[ÂA]NLAR/i.test(xmlText(html))) {
+          const anchors = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)];
+          const section = anchors.find(match => /çeşitli\s+il[âa]nlar/i.test(xmlText(match[2])));
+          const href = section?.[1]?.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1];
+          if (href) {
+            const sectionUrl = new URL(href, pageUrl);
+            if (sectionUrl.hostname === 'www.resmigazete.gov.tr' || sectionUrl.hostname === 'resmigazete.gov.tr') {
+              const sectionController = new AbortController();
+              const sectionTimeout = setTimeout(() => sectionController.abort(), 22000);
+              try {
+                const sectionResponse = await fetch(sectionUrl.toString(), {
+                  signal: sectionController.signal,
+                  headers: {
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+                    'accept': 'text/html,application/xhtml+xml',
+                    'accept-language': 'tr-TR,tr;q=0.9'
+                  },
+                  redirect: 'follow'
+                });
+                if (sectionResponse.ok) html = await sectionResponse.text();
+                else lastError = new Error('Resmî Gazete Çeşitli İlânlar bağlantısı HTTP ' + sectionResponse.status + ' döndürdü.');
+              } finally {
+                clearTimeout(sectionTimeout);
+              }
+            }
+          }
+        }
+
         const items = parseResmiGazeteItems(html, source, dateKey, pageUrl);
+        const pageText = xmlText(html);
         if (items.length) return items;
-        if (/ÇEŞİTLİ\s+İL[ÂA]NLAR/i.test(xmlText(html))) return [];
+        if (/ÇEŞİTLİ\s+İL[ÂA]NLAR/i.test(pageText)) return [];
         lastError = new Error('Resmî Gazete sayfası açıldı ancak Çeşitli İlânlar bölümü doğrulanamadı.');
       } catch (error) {
         lastError = error;
@@ -443,16 +482,15 @@ async function fetchResmiGazete(source) {
   }
   throw lastError || new Error('Son 5 gün içinde Resmî Gazete Çeşitli İlânlar sayfası bulunamadı.');
 }
-
 async function fetchKariyerKapisi(source) {
   const endpoint = 'https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage';
   const requestBody = { krM_ID: 0, searchText: '', il: '0', ilanTuru: '0' };
   let response;
   let lastError;
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 18000);
+    const timeout = setTimeout(() => controller.abort(), 27000);
     try {
       response = await fetch(endpoint, {
         method: 'POST',
@@ -477,7 +515,7 @@ async function fetchKariyerKapisi(source) {
     } finally {
       clearTimeout(timeout);
     }
-    await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+    await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)));
   }
 
   if (!response || !response.ok) throw new Error('Kariyer Kapısı API yanıt vermedi: ' + safeText(lastError?.message || 'bilinmeyen hata', 300));
