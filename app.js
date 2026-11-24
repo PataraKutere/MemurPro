@@ -903,7 +903,7 @@ function exportBackup() {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob); const link = document.createElement('a');
   link.href = url; link.download = `memurpro-yedek-${new Date().toISOString().slice(0,10)}.json`;
-  document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast('Takip listesi ve aday profilin yedeklendi.');
 }
 
@@ -928,6 +928,7 @@ function bindEvents() {
     setView('listings');
     const category = button.dataset.filterCategory;
     if (category === 'KPSS') $('#announcementTypeFilter').value = 'KPSS / sınav duyurusu';
+    else if (category === 'Belediye') $('#institutionTypeFilter').value = 'Belediye';
     else $('#employmentTypeFilter').value = category === 'Sözleşmeli' ? 'Sözleşmeli personel' : category;
     bindFilters();
   }));
