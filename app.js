@@ -491,7 +491,7 @@ async function loadLiveData() {
   try {
     const apiBase = String(window.MEMURPRO_API_BASE || '').replace(/\/$/, '');
     if (!apiBase) return null; // GitHub Pages tek başına kullanılıyorsa API çağrısı yapma.
-    const response = await fetch(`${apiBase}/api/listings`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    const response = await fetch(`${apiBase}/api/listings?limit=200`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
     if (!response.ok) throw new Error(`API ${response.status}`);
     const payload = await response.json();
     if (!Array.isArray(payload.listings)) throw new Error('Beklenmeyen API yanıtı');
