@@ -13,7 +13,7 @@
 
 ## Önemli: canlı ilan durumu
 
-Bu sürümde Cloudflare Worker ve D1 veritabanı kuruldu. ÖSYM'nin kamuya açık duyuru sayfası için HTML adaptörü, Kariyer Kapısı'nın kamuya açık JSON ilan listesi için API adaptörü, İlan.gov.tr'nin Kamu-Akademik Personel API'si ve SBB portalının liste sayfası adaptörü eklendi. Kariyer Kapısı, SBB ve İlan.gov.tr kaynakları erişim kısıtları uygulayabilir. Worker gerçek istek başarılı olursa kaynağı bağlı, başarısız olursa hata olarak işaretler. SBB'nin ilan detay/PDF bağlantıları oturuma bağlı olabildiği için MemurPro doğrudan kırılabilecek oturum URL'si yerine portal ana sayfasına yönlendirir. İŞKUR için henüz resmî, kimlik doğrulaması gerektirmeyen bir açık veri uç noktası doğrulanmadı.
+Bu sürümde Cloudflare Worker ve D1 veritabanı kuruldu. ÖSYM duyuruları, Kariyer Kapısı'nın JSON ilan listesi, İlan.gov.tr'nin Kamu-Akademik Personel API'si, SBB portalının liste sayfası ve Resmî Gazete RSS'i için kaynak adaptörleri eklendi. Kariyer Kapısı, SBB ve İlan.gov.tr kaynakları erişim kısıtları uygulayabilir. Worker gerçek istek başarılı olursa kaynağı bağlı, başarısız olursa hata olarak işaretler. SBB'nin ilan detay/PDF bağlantıları oturuma bağlı olabildiği için MemurPro doğrudan kırılabilecek oturum URL'si yerine portal ana sayfasına yönlendirir. İŞKUR için henüz resmî, kimlik doğrulaması gerektirmeyen bir kamu ilanı API uç noktası doğrulanmadı. e-Devlet üzerinden erişilebilen iş arama hizmeti, kullanıcı oturumu gerektirdiği için MemurPro tarafından otomatik oturum açma yoluyla kullanılmaz.
 
 Resmî kaynak dizini:
 - Kariyer Kapısı: <https://kariyerkapisi.gov.tr/>
@@ -50,7 +50,7 @@ Bu depo `PataraKutere/MemurPro` adıyla oluşturulmuştur. Dosyalar kök dizinde
 3. D1 Console'da `worker/schema.sql` dosyasının tamamını çalıştır.
 4. Worker Settings → Bindings bölümünde D1 veritabanını `DB` adıyla bağla.
 5. Worker Settings → Variables and Secrets bölümünde `ADMIN_TOKEN` isminde rastgele ve güçlü bir secret oluştur. Bu değeri kaynak koda yazma.
-6. Worker için Cron Trigger ekle. MemurPro Worker şu anda `*/30 * * * *` (30 dakikada bir) takviminde çalışacak şekilde yapılandırılmıştır.
+6. Worker için Cron Trigger ekle. MemurPro Worker `*/30 * * * *` takviminde çalışır. Kaynak başına istek aralıkları ayrıca sınırlandırılır: Kariyer Kapısı 30 dakika, ÖSYM/İlan.gov.tr/SBB 1 saat, Resmî Gazete RSS 24 saat. Böylece bütün kaynaklara her 30 dakikada bir gereksiz istek gönderilmez.
 7. `config.js` içindeki `window.MEMURPRO_API_BASE` değerini Worker'ın `https://...workers.dev` adresiyle değiştir.
 
 ### Kaynak bağlayıcıları
