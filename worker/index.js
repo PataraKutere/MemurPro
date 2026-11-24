@@ -984,7 +984,8 @@ async function syncConfiguredSources(env) {
     'ilan-gov': 60 * 60 * 1000,
     'kamuilan-sbb': 60 * 60 * 1000,
     'resmi-gazete': 24 * 60 * 60 * 1000,
-    'iskur': 60 * 60 * 1000,\n    'iskur-kamu-memur': 30 * 60 * 1000
+    'iskur': 60 * 60 * 1000,
+    'iskur-kamu-memur': 30 * 60 * 1000
   };
 
   // Claim sources atomically, then fetch independent official sources concurrently.
