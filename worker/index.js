@@ -178,6 +178,7 @@ async function isRateLimited(env, request, name, maxHits = 3, windowMs = 600000)
   const bucket = name + ':' + ip;
   const now = Date.now(); const cutoff = now - windowMs;
   try {
+    await env.DB.prepare('DELETE FROM api_rate_limits WHERE window_started_at < ?').bind(now - 86400000).run();
     const row = await env.DB.prepare(`INSERT INTO api_rate_limits (bucket,hits,window_started_at) VALUES (?,1,?) ON CONFLICT(bucket) DO UPDATE SET hits=CASE WHEN window_started_at<=? THEN 1 ELSE hits+1 END, window_started_at=CASE WHEN window_started_at<=? THEN excluded.window_started_at ELSE window_started_at END RETURNING hits`).bind(bucket,now,cutoff,cutoff).first();
     return Number(row?.hits || 0) > maxHits;
   } catch { return true; }
