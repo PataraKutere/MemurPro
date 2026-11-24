@@ -66,7 +66,7 @@ Kaynak taraması GitHub Actions üzerinde, Chromium tabanlı Playwright ile çal
 
 ### Kaynak bağlayıcıları
 
-Gerçek kaynak adaptörleri `collector/scrape.py` içinde bulunur: `kariyer-kapisi`, `resmi-gazete`, `osym`, `ilan-gov`, `kamuilan-sbb` ve `iskur`. Worker tarafındaki RSS/JSON normalleştirme yardımcıları genel amaçlıdır; mevcut altı kaynağın taramasının yapıldığı anlamına gelmez. İŞKUR adaptörü yalnızca oturumsuz kamu filtresi gerçekten kullanılabiliyorsa kayıt gönderir; aksi durumda kaynak atlanır.
+Gerçek kaynak adaptörleri `collector/scrape.py` içinde bulunur: `kariyer-kapisi`, `resmi-gazete`, `osym`, `ilan-gov`, `kamuilan-sbb`, `sbb-kurum-duyurulari`, `iskur` ve `iskur-kamu-memur`. Bazı kaynaklar HTTP 403/406 nedeniyle erişilemeyebilir; bunlar başarıyla taranmış gibi gösterilmez. İŞKUR adaptörü yalnızca oturumsuz kamu filtresi gerçekten kullanılabiliyorsa kayıt gönderir; aksi durumda kaynak atlanır.
 
 JSON akışı aşağıdaki normalize edilmiş alanları içermelidir:
 
