@@ -235,3 +235,6 @@ body{background:#0d1523;color:#e4eaf4}
 .application-tracker label{min-width:150px}
 .application-tracker select,.application-tracker input{min-width:150px}
 @media(max-width:620px){.reminder-center{padding:12px}.application-tracker label{width:100%}.application-tracker select,.application-tracker input{min-width:0}}
+
+.source-state.degraded{color:#bd8738}
+.source-state.degraded:before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:#d6a34e;margin:0 5px 1px 0}
