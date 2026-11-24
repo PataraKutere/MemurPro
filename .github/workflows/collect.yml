@@ -27,8 +27,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: collector/requirements.txt
       - name: Validate collector syntax
         run: python -m py_compile collector/scrape.py
       - name: Install dependencies and Chromium
