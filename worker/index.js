@@ -60,8 +60,10 @@ function normalizeDate(value) {
 function normalizeDateOnly(value) {
   if (!value) return null;
   const raw = String(value).trim();
-  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (match) return match[1];
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (iso) return iso[1];
+  const local = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (local) return local[3] + '-' + local[2].padStart(2, '0') + '-' + local[1].padStart(2, '0');
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
@@ -176,7 +178,79 @@ function parseOsymKpssPage(html, source) {
   return items.slice(0, 100);
 }
 
+async function fetchKariyerKapisi(source) {
+  const endpoint = 'https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage';
+  const requestBody = { krM_ID: 0, searchText: '', il: '0', ilanTuru: '0' };
+  let response;
+  let lastError;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 18000);
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'content-type': 'application/json',
+          'origin': 'https://kariyerkapisi.gov.tr',
+          'referer': 'https://kariyerkapisi.gov.tr/isealim',
+          'user-agent': 'Mozilla/5.0 (compatible; MemurPro/0.1; public announcement monitor)',
+          'accept': 'application/json, text/plain, */*'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      if (response.ok) break;
+      lastError = new Error('Kariyer Kapısı API HTTP ' + response.status);
+      if (![429, 500, 502, 503, 504].includes(response.status)) throw lastError;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 2) throw new Error('Kariyer Kapısı erişimi başarısız: ' + safeText(error?.message || error, 300));
+    } finally {
+      clearTimeout(timeout);
+    }
+    await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+  }
+
+  if (!response || !response.ok) throw new Error('Kariyer Kapısı API yanıt vermedi: ' + safeText(lastError?.message || 'bilinmeyen hata', 300));
+  const payload = await response.json();
+  if (!Array.isArray(payload?.searchIlan)) throw new Error('Kariyer Kapısı API beklenen searchIlan listesini döndürmedi.');
+
+  const today = new Date().toISOString().slice(0, 10);
+  return payload.searchIlan.slice(0, 500).map(item => {
+    const guid = safeText(item.guid, 100);
+    const title = safeText(item.ilanBaslik || item.ilanAdi || item.baslik, 500);
+    if (!guid || !title) return null;
+
+    const startDate = normalizeDateOnly(item.basTarih || item.baslangicTarihi);
+    const endDate = normalizeDateOnly(item.bitTarih || item.bitisTarihi);
+    const hasStarted = !startDate || startDate <= today;
+    const notEnded = !endDate || endDate >= today;
+    const confirmedOpen = Boolean(endDate && hasStarted && notEnded);
+
+    return {
+      externalId: guid,
+      title,
+      institution: safeText(item.kurumAdi || item.kurum || source.name, 500),
+      summary: 'Kariyer Kapısı kamu işe alım ilanı. Başvuru şartları, pozisyonlar ve güncel takvim için resmî ilan sayfasını açın.',
+      category: item.ilanTipi === 2 ? 'Duyuru' : 'Kamu ilanı',
+      city: safeText(item.ilAdi || item.il || item.sehir, 100),
+      education: safeText(item.ogrenimDurumu || item.ogrenim, 100),
+      scoreType: safeText(item.puanTuru || item.kpssPuanTuru, 50),
+      publishedAt: normalizeDate(item.yayinTarihi || item.ilanTarihi || item.kayitTarihi),
+      startDate,
+      endDate,
+      detailUrl: 'https://kariyerkapisi.gov.tr/IlanDetay?i=' + encodeURIComponent(guid),
+      sourceName: source.name,
+      status: confirmedOpen ? 'open' : 'check_required'
+    };
+  }).filter(Boolean);
+}
+
 async function fetchFeed(source) {
+  if (source.adapter === 'kariyer-kapisi') {
+    return { items: await fetchKariyerKapisi(source) };
+  }
   if (source.adapter === 'osym-kpss') {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
