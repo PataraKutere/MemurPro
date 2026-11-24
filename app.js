@@ -149,6 +149,23 @@ function listingCard(listing) {
   </article>`;
 }
 
+function updateCityFilter() {
+  const select = $('#cityFilter');
+  if (!select) return;
+  const selected = select.value;
+  const existing = new Set([...select.options].map(option => normalizeSearchText(option.value)));
+  const cities = [...new Set(state.listings.map(item => String(item.city || '').trim()).filter(city => city && city !== 'Türkiye Geneli'))]
+    .sort((a, b) => a.localeCompare(b, 'tr'));
+  for (const city of cities) {
+    if (existing.has(normalizeSearchText(city))) continue;
+    const option = document.createElement('option');
+    option.value = city;
+    option.textContent = city;
+    select.appendChild(option);
+  }
+  if ([...select.options].some(option => option.value === selected)) select.value = selected;
+}
+
 function updateSourceFilter() {
   const select = $('#sourceFilter');
   if (!select) return;
@@ -272,9 +289,11 @@ function assessListing(listing) {
     else markFail(`İlan metninde ${p.department} bölüm/programı bulunamadı; resmî şartları kontrol et.`);
   }
   if (p.education) {
-    if (!listing.education) markUnknown('İlanın öğrenim şartı kaynak verisinde yok.');
-    else if (normalizeEducation(p.education) === normalizeEducation(listing.education)) markPass('Öğrenim düzeyi eşleşiyor.');
-    else markFail(`Öğrenim şartı farklı: ${listing.education}.`);
+    const listingEducation = normalizeEducation([listing.education, listing.summary].filter(Boolean).join(' '));
+    const candidateEducation = normalizeEducation(p.education);
+    if (!listingEducation) markUnknown('İlanın öğrenim şartı kaynak verisinde yok.');
+    else if (listingEducation.includes(candidateEducation)) markPass('Öğrenim düzeyi ilan metninde eşleşiyor.');
+    else markFail(`İlanın öğrenim şartı profilindeki ${p.education} düzeyiyle eşleşmiyor.`);
   }
   if (p.scoreType) {
     if (listing.scoreType) {
@@ -519,6 +538,7 @@ async function loadLiveData() {
     const payload = await response.json();
     if (!Array.isArray(payload.listings)) throw new Error('Beklenmeyen API yanıtı');
     state.listings = payload.listings;
+    updateCityFilter();
     state.sources = Array.isArray(payload.sources) ? payload.sources : state.sources;
     updateSourceFilter();
     renderListings();
