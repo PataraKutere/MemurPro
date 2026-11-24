@@ -315,3 +315,10 @@ body{background:#0b1020;color:#e7ebf5}
 .sidebar{background:#080d1a}
 .sidebar .nav-link.active{background:#202d49}
 @media(max-width:620px){.topbar{border-color:#273149}.listing-toolbar{color:#e7ebf5}.sort-control select{background:#0e1628;color:#e7ebf5}}
+
+.mobile-nav{background:#10182a;border-color:#29344c;box-shadow:0 -8px 25px rgba(0,0,0,.25)}
+.mobile-nav-link{color:#98a6c0}
+.mobile-nav-link.active{color:#b4bdff}
+.source-row:hover{background:#19243a}
+.listing-detail-dialog::backdrop{background:rgba(2,6,16,.72)}
+.checklist-row input{accent-color:#8996ff}
