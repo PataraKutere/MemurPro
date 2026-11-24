@@ -1,4 +1,4 @@
-const CACHE_NAME = 'memurpro-static-v33';
+const CACHE_NAME = 'memurpro-static-v34';
 const STATIC_FILES = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './assets/favicon.svg'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_FILES)));
