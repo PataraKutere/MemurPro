@@ -543,7 +543,7 @@ async function syncOneSource(source, env) {
 }
 
 async function syncConfiguredSources(env) {
-  const result = await env.DB.prepare(\`SELECT id, name, homepage_url, feed_url, feed_type, adapter, enabled, last_checked_at FROM sources WHERE enabled=1\`).all();
+  const result = await env.DB.prepare(`SELECT id, name, homepage_url, feed_url, feed_type, adapter, enabled, last_checked_at FROM sources WHERE enabled=1`).all();
   const sources = result.results || [];
   const outcomes = [];
   const minIntervals = {
