@@ -90,6 +90,13 @@
           </div>
         </section>
 
+        <section class="section-block match-section">
+          <div class="section-head"><div><div class="panel-kicker">SANA UYGUN FIRSATLAR</div><h2>Aday profiline uyan ilanlar</h2></div><button class="text-button" id="editMatchProfile">Profilimi düzenle →</button></div>
+          <div id="matchedListings" class="listing-results">
+            <div class="listing-placeholder"><strong>Profilini oluştur</strong><p>Öğrenim düzeyini, KPSS puan türünü, puanını ve şehir tercihini kaydet. MemurPro mevcut ilanları bu bilgilere göre eşleştirsin.</p><button class="button button-outline" data-go="tools">Aday profilini oluştur</button></div>
+          </div>
+        </section>
+
         <section class="section-block latest-block">
           <div class="section-head"><div><div class="panel-kicker">SON EKLENENLER</div><h2>Yeni ilanlar</h2></div><span class="empty-count">Canlı akış bekleniyor</span></div>
           <div class="empty-state compact-empty"><span class="empty-icon">⌕</span><div><strong>Henüz doğrulanmış ilan yok</strong><p>Kaynak bağlantıları tamamlandığında yeni ilanlar burada görünecek.</p></div><button class="button button-outline" data-go="listings">İlan ekranını aç</button></div>
@@ -149,6 +156,7 @@
             <h2>Tercihlerini kaydet</h2><p>Filtrelerini daha hızlı kullanmak için öğrenim ve puan türünü bu cihazda sakla.</p>
             <label class="field"><span>Öğrenim düzeyi</span><select id="profileEducation"><option value="">Seçiniz</option><option>Ortaöğretim</option><option>Ön lisans</option><option>Lisans</option><option>Doktora</option></select></label>
             <label class="field"><span>KPSS puan türü</span><select id="profileScore"><option value="">Seçiniz</option><option>P93</option><option>P94</option><option>P3</option></select></label>
+            <label class="field"><span>KPSS puanın (isteğe bağlı)</span><input type="number" id="profileScoreValue" min="0" max="100" step="0.00001" placeholder="Örn. 72,50"></label>
             <label class="field"><span>Öncelikli şehir</span><input type="text" id="profileCity" placeholder="Örn. İstanbul"></label>
             <button class="button button-primary full-button" id="saveProfile">Tercihleri kaydet</button>
             <div class="tool-result" id="profileResult" aria-live="polite">Bilgiler yalnızca bu tarayıcıda saklanır.</div>
