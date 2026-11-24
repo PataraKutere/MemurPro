@@ -309,7 +309,7 @@ async function getSources(env) {
     (SELECT COUNT(*) FROM source_checks c WHERE c.source_id=s.id AND c.checked_at >= datetime('now','-1 day')) AS checks24h,
     (SELECT COUNT(*) FROM source_checks c WHERE c.source_id=s.id AND c.status='success' AND c.checked_at >= datetime('now','-1 day')) AS successes24h,
     (SELECT MAX(c.checked_at) FROM source_checks c WHERE c.source_id=s.id AND c.status='success') AS lastSuccessAt,
-    (SELECT c.item_count FROM source_checks c WHERE c.source_id=s.id ORDER BY c.checked_at DESC LIMIT 1) AS latestItemCount
+    (SELECT c.item_count FROM source_checks c WHERE c.source_id=s.id AND c.status='success' ORDER BY c.checked_at DESC LIMIT 1) AS latestItemCount
     FROM sources s ORDER BY s.name`).all();
   return (result.results || []).map(source => ({
     ...source,
