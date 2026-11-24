@@ -41,6 +41,7 @@ Bu depo `PataraKutere/MemurPro` adıyla oluşturulmuştur. Dosyalar kök dizinde
 - `GET /api/health`
 - `GET /api/sources`
 - `GET /api/listings`
+- `POST /api/sync-now` (public, source-specific polling limits and atomic claim are enforced)
 - `POST /api/admin/sync` (yalnızca `x-admin-token` gizli başlığıyla)
 
 ### Backend kurulum özeti
