@@ -129,3 +129,18 @@ body{background:#0d1523;color:#e4eaf4}
 #matchedListings .details-button{background:#303d68;color:#d8ddff}
 #matchedListings .listing-placeholder{background:#172338;border-color:#34475f;color:#e7edf8}
 #matchedListings .listing-placeholder p{color:#aab8ca}
+
+
+/* Application tracking */
+.tracking-summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:4px;padding:14px 16px;border:1px solid #2b3a50;border-radius:12px;background:#172234;color:#aab8ca;font-size:10px}
+.tracking-summary span{padding-right:12px;border-right:1px solid #34445c}
+.tracking-summary span:last-child{border:0}
+.tracking-summary strong{color:#e7edf7;font-size:13px;margin-right:4px}
+.application-tracker{grid-column:1/-1;display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin-top:2px;padding-top:14px;border-top:1px solid #2b3a50}
+.application-tracker label{display:grid;gap:6px;min-width:170px}
+.application-tracker label span{font-size:9px;color:#aab8ca;font-weight:700}
+.application-tracker select,.application-tracker input{height:36px;min-width:170px;padding:0 10px;border:1px solid #3a4a60;border-radius:8px;background:#111c2b;color:#e2e9f4;font:500 10px 'DM Sans',sans-serif;color-scheme:dark}
+.deadline-countdown{font-size:10px;font-weight:700;color:#aab8ca;padding:10px 2px}
+.deadline-countdown.upcoming{color:#e5bd72}
+.deadline-countdown.overdue{color:#ef918a}
+@media(max-width:620px){.tracking-summary{gap:8px;padding:12px}.tracking-summary span{font-size:9px}.application-tracker{align-items:stretch;gap:10px}.application-tracker label{width:100%;min-width:0}.application-tracker select,.application-tracker input{width:100%}.deadline-countdown{padding:2px 0 0}}
