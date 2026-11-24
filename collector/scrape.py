@@ -44,9 +44,20 @@ def date(v):
         except ValueError: return None
     return None
 def item(sid,eid,title,inst,url,summary="",**kw):
-    return {"externalId":str(eid),"title":tx(title)[:500],"institution":tx(inst)[:500] or sid,
-      "summary":tx(summary)[:4000],"category":kw.get("category","Kamu ilanı"),"city":kw.get("city"),
-      "education":kw.get("education"),"scoreType":kw.get("scoreType"),"minimumScore":kw.get("minimumScore"),
+    institution=tx(inst)[:500] or sid
+    title_text=tx(title)[:500]
+    category=kw.get("category","Kamu ilanı")
+    combined=(institution+" "+title_text).lower()
+    institution_type=kw.get("institutionType")
+    if not institution_type:
+        institution_type="Belediye" if re.search(r"belediye|büyükşehir",combined) else "Üniversite" if re.search(r"üniversite|rektörlük",combined) else "Bakanlık / Başkanlık" if re.search(r"bakanlık|başkanlık|genel müdürlük",combined) else "Diğer kamu kurumu"
+    employment_type=kw.get("employmentType") or ("İşçi" if category=="İşçi" else "Sözleşmeli personel" if re.search(r"sözleşmeli|4/b",combined) else "Memur" if category=="Memur" or re.search(r"memur|zabıta|itfaiye",combined) else "")
+    announcement_type=kw.get("announcementType") or ("KPSS tercih / yerleştirme" if re.search(r"kpss.*(tercih|yerleştirme)|merkezi yerleştirme",combined) else "Personel alımı" if RE.search(title_text) else "Duyuru")
+    return {"externalId":str(eid),"title":title_text,"institution":institution,
+      "summary":tx(summary)[:12000],"category":category,"city":kw.get("city"),
+      "education":kw.get("education"),"departments":kw.get("departments",[]),
+      "employmentType":employment_type,"institutionType":institution_type,"announcementType":announcement_type,
+      "scoreType":kw.get("scoreType"),"minimumScore":kw.get("minimumScore"),
       "publishedAt":kw.get("publishedAt"),"startDate":kw.get("startDate"),"endDate":kw.get("endDate"),
       "positionCount":kw.get("positionCount"),"detailUrl":url,"status":kw.get("status","check_required")}
 def keep(x):
@@ -460,6 +471,7 @@ def scrape_iskur_memur(browser):
             score_type=None
             minimum_score=None
             position_count=None
+            departments=[]
             start_date=None
             if link and detail.lower().split("?")[0].endswith(".pdf"):
                 try:
@@ -469,8 +481,18 @@ def scrape_iskur_memur(browser):
                     full_text=tx(" ".join(page.extract_text() or "" for page in reader.pages))[:12000]
                     if not full_text:
                         raise RuntimeError("İŞKUR PDF metni boş veya taranmış görüntü.")
-                    if re.search(r"ön\s*lisans[^.]{0,500}\badalet\b|\badalet\b[^.]{0,500}ön\s*lisans",full_text,re.I):
-                        education="Ön lisans: Adalet ve ilanda belirtilen diğer programlar"
+                    department_patterns=[
+                        (r"\badalet\b","Adalet"),
+                        (r"mahalli\s+idareler","Mahalli İdareler"),
+                        (r"yerel\s+yönetimler","Yerel Yönetimler"),
+                        (r"büro\s+yönetimi(?:\s+ve\s+yönetici\s+asistanlığı)?","Büro Yönetimi"),
+                        (r"bilgisayar\s+programcılığı","Bilgisayar Programcılığı"),
+                        (r"çocuk\s+gelişimi","Çocuk Gelişimi"),
+                        (r"insan\s+kaynakları","İnsan Kaynakları")
+                    ]
+                    departments=[name for pattern,name in department_patterns if re.search(pattern,full_text,re.I)]
+                    if "Adalet" in departments and re.search(r"ön\s*lisans",full_text,re.I):
+                        education="Ön lisans: "+", ".join(departments)+" ve ilanda belirtilen diğer programlar"
                     score_match=re.search(r"KPSS\s*(?:\(B\)\s*)?P(93|94|3)\b",full_text,re.I)
                     score_type=("P"+score_match.group(1)) if score_match else None
                     min_match=re.search(r"(?:en\s+az|asgari)\s*(\d{2,3})\s*(?:puan)?",full_text,re.I)
@@ -485,7 +507,7 @@ def scrape_iskur_memur(browser):
             is_open=bool(end_date and end_date>=local_today() and (not start_date or start_date<=local_today()))
             out.append(item("iskur-kamu-memur",eid,title,"İŞKUR Kamu Memur Alım İlanları",detail,
                 full_text,category="Memur",city="İstanbul",education=education,scoreType=score_type,
-                minimumScore=minimum_score,positionCount=position_count,startDate=start_date,
+                minimumScore=minimum_score,positionCount=position_count,departments=departments,startDate=start_date,
                 endDate=end_date,status="open" if is_open else "check_required"))
         if not out:
             body=tx(soup.get_text(" ",strip=True))
