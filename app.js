@@ -600,54 +600,10 @@ function showProfileTool() {
   showToast('Aday tercihlerini Araçlar bölümünden düzenleyebilirsin.');
 }
 
-async function refreshSources() {
-  const button = $('#refreshSources');
-  const apiBase = String(window.MEMURPRO_API_BASE || '').replace(/\/$/, '');
-  if (!apiBase) return showToast('Kaynak kontrol API adresi ayarlanmamış.');
-  if (button?.disabled) return;
-
-  if (button) {
-    button.disabled = true;
-    button.textContent = 'Kaynaklar kontrol ediliyor…';
-  }
-
-  try {
-    // The Worker keeps this request open until every source has finished.
-    const response = await fetch(`${apiBase}/api/sync-now`, {
-      method: 'POST',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store'
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || `API ${response.status}`);
-
-    await loadLiveData();
-    const results = Array.isArray(payload.results) ? payload.results : [];
-    const processed = results.reduce((sum, item) => sum + (Number(item.imported) || 0), 0);
-    const failed = results.filter(item => item.status === 'failed').length;
-    const connected = results.filter(item => item.status === 'connected').length;
-    const degraded = results.filter(item => item.status === 'degraded').length;
-    const skipped = results.filter(item => item.skipped || item.status === 'pending').length;
-    const summary = results.map(item => {
-      const state = item.status === 'connected' ? '✓' : item.status === 'degraded' ? '~' : item.status === 'failed' ? '!' : '–';
-      return `${state} ${item.source}${item.message ? ': ' + item.message : ''}`;
-    }).join('\n');
-    if (summary) console.info('MemurPro kaynak kontrolü:\n' + summary);
-    if (failed || degraded) {
-      showToast(`Kontrol bitti: ${connected} ilan akışı bağlı, ${degraded} site açık/akış hatalı, ${failed} erişilemiyor, ${skipped} beklemede.`);
-    } else if (!connected && skipped) {
-      showToast('Yeni kontrol yapılmadı; kaynakların kontrol aralığı henüz dolmadı.');
-    } else {
-      showToast(`Kontrol tamamlandı: ${processed} kayıt işlendi, ${connected} kaynak bağlı.`);
-    }
-  } catch (error) {
-    showToast(`Kaynak kontrolü başlatılamadı: ${error.message}`);
-  } finally {
-    if (button) {
-      button.disabled = false;
-      button.textContent = 'Şimdi kontrol et ↻';
-    }
-  }
+function refreshSources() {
+  const url = 'https://github.com/PataraKutere/MemurPro/actions/workflows/collect.yml';
+  window.open(url, '_blank', 'noopener');
+  showToast('Kaynak kontrolünü başlatmak için açılan GitHub Actions sayfasında “Run workflow” düğmesine bas. Otomatik tarama 30 dakikada bir çalışır.');
 }
 
 function ensureListingDialog() {
