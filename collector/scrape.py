@@ -218,8 +218,11 @@ def scrape_resmi():
                     errors.append(f"{d} içerik eşleşmedi: {u.rsplit('/',1)[-1]}")
                     continue
                 found=parse_resmi(html,key,u)
-                print(f"Resmî Gazete OK {d}: {len(found)} ilan adayı ({'PDF' if is_pdf else 'HTML'})",file=sys.stderr)
-                return found[:150]
+                if found:
+                    print(f"Resmî Gazete OK {d}: {len(found)} ilan adayı ({'PDF' if is_pdf else 'HTML'})",file=sys.stderr)
+                    return found[:150]
+                errors.append(f"{d} {u.rsplit('/',1)[-1]}: içerik açıldı ancak personel ilanı ayrıştırılamadı; sonraki alternatif deneniyor.")
+                continue
             except Exception as exc:
                 errors.append(f"{d} {u.rsplit('/',1)[-1]}: {str(exc)[:100]}")
     raise RuntimeError("Resmî Gazete son 4 günün HTML/PDF alternatifleri okunamadı. "+"; ".join(errors[-8:])[:450])
