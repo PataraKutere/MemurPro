@@ -626,14 +626,15 @@ async function refreshSources() {
     const processed = results.reduce((sum, item) => sum + (Number(item.imported) || 0), 0);
     const failed = results.filter(item => item.status === 'failed').length;
     const connected = results.filter(item => item.status === 'connected').length;
+    const degraded = results.filter(item => item.status === 'degraded').length;
     const skipped = results.filter(item => item.skipped || item.status === 'pending').length;
     const summary = results.map(item => {
-      const state = item.status === 'connected' ? '✓' : item.status === 'failed' ? '!' : '–';
+      const state = item.status === 'connected' ? '✓' : item.status === 'degraded' ? '~' : item.status === 'failed' ? '!' : '–';
       return `${state} ${item.source}${item.message ? ': ' + item.message : ''}`;
     }).join('\n');
     if (summary) console.info('MemurPro kaynak kontrolü:\n' + summary);
-    if (failed) {
-      showToast(`Kontrol bitti: ${connected} bağlı, ${failed} hatalı, ${skipped} beklemede.`);
+    if (failed || degraded) {
+      showToast(`Kontrol bitti: ${connected} ilan akışı bağlı, ${degraded} site açık/akış hatalı, ${failed} erişilemiyor, ${skipped} beklemede.`);
     } else if (!connected && skipped) {
       showToast('Yeni kontrol yapılmadı; kaynakların kontrol aralığı henüz dolmadı.');
     } else {
