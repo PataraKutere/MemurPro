@@ -397,7 +397,7 @@ async function fetchResmiGazete(source) {
   let lastError = null;
 
   // Tarihli ilan dosyasını tahmin etmek yerine önce Resmî Gazete fihristinden resmî bağlantıyı bul.
-  for (let offset = 0; offset < 7; offset++) {
+  for (let offset = 0; offset < 3; offset++) {
     const date = new Date(baseDate.getTime() - offset * 86400000);
     const year = String(date.getUTCFullYear());
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -406,11 +406,11 @@ async function fetchResmiGazete(source) {
     const isoDate = year + '-' + month + '-' + day;
     const directUrl = 'https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/' + year + '/' + month + '/' + dateKey + '-4.htm';
     const fihristUrl = 'https://www.resmigazete.gov.tr/fihrist?tarih=' + isoDate;
-    const candidates = [fihristUrl, directUrl, directUrl.replace('www.resmigazete.gov.tr', 'resmigazete.gov.tr')];
+    const candidates = [fihristUrl, directUrl];
 
     for (const pageUrl of candidates) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+      const timeout = setTimeout(() => controller.abort(), 8000);
       try {
         const response = await fetch(pageUrl, {
           signal: controller.signal,
@@ -440,7 +440,7 @@ async function fetchResmiGazete(source) {
               throw new Error('Resmî Gazete fihrist bağlantısı resmî alan adı dışında.');
             }
             const sectionController = new AbortController();
-            const sectionTimeout = setTimeout(() => sectionController.abort(), 12000);
+            const sectionTimeout = setTimeout(() => sectionController.abort(), 8000);
             try {
               const sectionResponse = await fetch(sectionUrl.toString(), {
                 signal: sectionController.signal,
@@ -476,7 +476,7 @@ async function fetchResmiGazete(source) {
       }
     }
   }
-  throw lastError || new Error('Son 7 gün içinde Resmî Gazete Çeşitli İlânlar sayfası doğrulanamadı.');
+  throw lastError || new Error('Son 3 gün içinde Resmî Gazete Çeşitli İlânlar sayfası doğrulanamadı.');
 }
 async function fetchKariyerKapisi(source) {
   const endpoints = ['https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage', 'https://kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage'];
@@ -485,9 +485,9 @@ async function fetchKariyerKapisi(source) {
   let lastError;
 
   for (const endpoint of endpoints) {
-   for (let attempt = 0; attempt < 2; attempt++) {
+   for (let attempt = 0; attempt < 1; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 18000);
+    const timeout = setTimeout(() => controller.abort(), 10000);
     try {
       response = await fetch(endpoint, {
         method: 'POST',
@@ -508,7 +508,7 @@ async function fetchKariyerKapisi(source) {
       lastError = error;
       const status = response?.status;
       const retryable = !status || [429, 500, 502, 503, 504].includes(status);
-      if (!retryable || attempt === 1) { lastError = error; break; }
+      if (!retryable || attempt === 0) { lastError = error; break; }
     } finally {
       clearTimeout(timeout);
     }
