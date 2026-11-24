@@ -238,3 +238,9 @@ body{background:#0d1523;color:#e4eaf4}
 
 .source-state.degraded{color:#bd8738}
 .source-state.degraded:before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:#d6a34e;margin:0 5px 1px 0}
+
+
+/* Source filter in public listings */
+#sourceFilter{min-width:0}
+@media(max-width:1200px){.filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:620px){.filter-grid{grid-template-columns:1fr 1fr}.filter-grid .search-field{grid-column:span 2}}
