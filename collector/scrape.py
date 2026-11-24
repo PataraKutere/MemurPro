@@ -144,7 +144,8 @@ def parse_resmi(html,date_key,page_url):
             minimumScore=float(min_match.group(1).replace(",", ".")) if min_match else None,
             publishedAt=f"{date_key[:4]}-{date_key[4:6]}-{date_key[6:8]}",
             startDate=start_date,endDate=end_date,
-            positionCount=int(count_match.group(1)) if count_match else None))
+            positionCount=int(count_match.group(1)) if count_match else None,
+            status="open" if end_date and end_date>=datetime.now(timezone.utc).date().isoformat() else "check_required"))
     return out[:100]
 
 def decode_resmi(response):
