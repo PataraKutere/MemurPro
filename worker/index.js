@@ -152,7 +152,7 @@ function normalizeIngestItem(item, source) {
     externalId: safeText(item.externalId || item.id || detailUrl, 2000),
     title,
     institution: institution || source.name,
-    summary: safeText(item.summary, 4000),
+    summary: safeText(item.summary, 12000),
     category: safeText(item.category || 'Kamu ilanı', 100),
     city: safeText(item.city, 100),
     education: safeText(item.education, 200),
