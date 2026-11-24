@@ -278,7 +278,76 @@ const APPLICATION_STATUSES = [
 ];
 
 function getTracking(id) {
-  return state.tracking[id] || { status: 'review', deadline: '' };
+  return state.tracking[id] || { status: 'review', deadline: '', steps: {}, documents: [] };
+}
+
+const APPLICATION_STEPS = [
+  ['reviewed', 'Resmî ilanı ve eklerini inceledim'],
+  ['conditions', 'Özel şartları ve başvuru yöntemini kontrol ettim'],
+  ['prepared', 'Gerekli belgeleri hazırladım'],
+  ['submitted', 'Başvurumu gönderdim'],
+  ['confirmed', 'Başvuru / kayıt onayını sakladım']
+];
+
+const DEFAULT_DOCUMENTS = [
+  { id: 'identity', label: 'Kimlik belgesi', note: 'İlan veya başvuru sistemi istiyorsa' },
+  { id: 'diploma', label: 'Diploma / mezuniyet belgesi', note: 'İlanın öğrenim şartına göre' },
+  { id: 'kpss', label: 'KPSS sonuç belgesi', note: 'KPSS şartı bulunan ilanlarda' },
+  { id: 'photo', label: 'Fotoğraf', note: 'Kurum talep ediyorsa' },
+  { id: 'other', label: 'Diğer kurum belgeleri', note: 'Sertifika, sağlık raporu, ehliyet vb. — ilana göre' }
+];
+
+function checklistMarkup(item, tracking) {
+  const steps = tracking.steps || {};
+  const documents = Array.isArray(tracking.documents) && tracking.documents.length
+    ? tracking.documents
+    : DEFAULT_DOCUMENTS;
+  const completed = APPLICATION_STEPS.filter(([key]) => steps[key]).length;
+  const percent = Math.round(completed / APPLICATION_STEPS.length * 100);
+  const stepRows = APPLICATION_STEPS.map(([key, label]) => `
+    <label class="checklist-row">
+      <input type="checkbox" data-track-step="${escapeHTML(item.id)}" data-step-key="${key}" ${steps[key] ? 'checked' : ''}>
+      <span>${escapeHTML(label)}</span>
+    </label>`).join('');
+  const documentRows = documents.map(doc => `
+    <div class="document-row">
+      <label class="checklist-row">
+        <input type="checkbox" data-doc-check="${escapeHTML(item.id)}" data-doc-key="${escapeHTML(doc.id)}" ${doc.done ? 'checked' : ''}>
+        <span><strong>${escapeHTML(doc.label)}</strong><small>${escapeHTML(doc.note || 'Kişisel kontrol kalemi')}</small></span>
+      </label>
+      ${doc.custom ? `<button type="button" class="remove-doc" data-remove-doc="${escapeHTML(item.id)}" data-doc-key="${escapeHTML(doc.id)}" aria-label="Belgeyi kaldır">×</button>` : ''}
+    </div>`).join('');
+  return `<section class="application-checklist" aria-label="Başvuru kontrol listesi">
+    <div class="checklist-heading"><div><strong>Başvuru adımları</strong><small>${completed}/${APPLICATION_STEPS.length} adım tamamlandı</small></div><b>${percent}%</b></div>
+    <div class="checklist-progress"><span style="width:${percent}%"></span></div>
+    <div class="checklist-steps">${stepRows}</div>
+    <div class="documents-heading"><strong>Evrak kontrol listesi</strong><small>Belgeler otomatik olarak zorunlu kabul edilmez; resmî ilandaki listeyi esas al.</small></div>
+    <div class="document-list">${documentRows}</div>
+    <div class="add-document-row"><input type="text" maxlength="100" placeholder="İlana özel belge ekle" data-doc-input="${escapeHTML(item.id)}"><button type="button" data-add-doc="${escapeHTML(item.id)}">Ekle +</button></div>
+  </section>`;
+}
+
+function addCustomDocument(id) {
+  const input = $('[data-doc-input]').find(element => element.dataset.docInput === String(id));
+  const label = input?.value.trim();
+  if (!label) return showToast('Önce eklenecek belge adını yaz.');
+  const tracking = getTracking(id);
+  const documents = Array.isArray(tracking.documents) && tracking.documents.length
+    ? [...tracking.documents]
+    : DEFAULT_DOCUMENTS.map(doc => ({ ...doc }));
+  documents.push({ id: `custom-${Date.now()}`, label, note: 'Kişisel eklediğin kontrol kalemi', done: false, custom: true });
+  saveTracking(id, { documents });
+  renderSaved();
+  showToast('Belge kontrol listene eklendi.');
+}
+
+function removeCustomDocument(id, docId) {
+  const tracking = getTracking(id);
+  const documents = (Array.isArray(tracking.documents) && tracking.documents.length
+    ? tracking.documents
+    : DEFAULT_DOCUMENTS.map(doc => ({ ...doc }))).filter(doc => doc.id !== docId);
+  saveTracking(id, { documents });
+  renderSaved();
 }
 
 function saveTracking(id, patch) {
@@ -332,7 +401,7 @@ function renderSaved() {
       <label><span>Başvuru durumu</span><select data-track-status="${escapeHTML(item.id)}">${options}</select></label>
       <label><span>Son başvuru tarihi</span><input type="date" value="${escapeHTML(deadline)}" data-track-deadline="${escapeHTML(item.id)}"></label>
       <span class="deadline-countdown${tone}">${escapeHTML(days)}</span>
-    </div>`;
+    </div>${checklistMarkup(item, tracking)}`;
     return listingCard(item).replace('</article>', `${controls}</article>`);
   }).join('');
 }
@@ -604,12 +673,37 @@ function bindEvents() {
       renderSaved();
       showToast('Son başvuru tarihi kaydedildi.');
     }
+    const stepControl = event.target.closest('[data-track-step]');
+    if (stepControl) {
+      const id = stepControl.dataset.trackStep;
+      const key = stepControl.dataset.stepKey;
+      const steps = { ...(getTracking(id).steps || {}), [key]: stepControl.checked };
+      saveTracking(id, { steps });
+      renderSaved();
+      showToast('Başvuru adımı kaydedildi.');
+    }
+    const docControl = event.target.closest('[data-doc-check]');
+    if (docControl) {
+      const id = docControl.dataset.docCheck;
+      const key = docControl.dataset.docKey;
+      const current = getTracking(id);
+      const documents = Array.isArray(current.documents) && current.documents.length
+        ? current.documents.map(doc => doc.id === key ? { ...doc, done: docControl.checked } : doc)
+        : DEFAULT_DOCUMENTS.map(doc => doc.id === key ? { ...doc, done: docControl.checked } : { ...doc });
+      saveTracking(id, { documents });
+      renderSaved();
+      showToast('Evrak durumu kaydedildi.');
+    }
   });
   document.addEventListener('click', event => {
     const closeDetail = event.target.closest('[data-close-detail]');
     if (closeDetail) $('#listingDetailDialog')?.close();
     const detailButton = event.target.closest('[data-detail-id]');
     if (detailButton) openListingDetails(detailButton.dataset.detailId);
+    const addDocButton = event.target.closest('[data-add-doc]');
+    if (addDocButton) addCustomDocument(addDocButton.dataset.addDoc);
+    const removeDocButton = event.target.closest('[data-remove-doc]');
+    if (removeDocButton) removeCustomDocument(removeDocButton.dataset.removeDoc, removeDocButton.dataset.docKey);
     const saveButton = event.target.closest('[data-save-id]');
     if (saveButton) {
       const item = [...state.listings, ...state.saved].find(listing => listing.id === saveButton.dataset.saveId);
