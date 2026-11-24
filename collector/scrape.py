@@ -481,7 +481,6 @@ def scrape_iskur_memur(browser):
                     full_text=tx(" ".join(page.extract_text() or "" for page in reader.pages))[:12000]
                     if not full_text:
                         raise RuntimeError("İŞKUR PDF metni boş veya taranmış görüntü.")
-                    print(f"İŞKUR PDF OK: {title} · {len(full_text)} karakter · bölümler: {', '.join(departments) if departments else 'metinden çıkarılamadı'}",file=sys.stderr)
                     department_patterns=[
                         (r"\badalet\b","Adalet"),
                         (r"mahalli\s+idareler","Mahalli İdareler"),
@@ -494,15 +493,19 @@ def scrape_iskur_memur(browser):
                     departments=[name for pattern,name in department_patterns if re.search(pattern,full_text,re.I)]
                     if "Adalet" in departments and re.search(r"ön\s*lisans",full_text,re.I):
                         education="Ön lisans: "+", ".join(departments)+" ve ilanda belirtilen diğer programlar"
-                    score_match=re.search(r"KPSS\s*(?:\(B\)\s*)?P(93|94|3)\b",full_text,re.I)
+                    department_row=re.search(r"\b\d+\s+Zabıta\s+Memuru\s+GİH\s+\d+\s+(\d{1,3})\s*-\s*[^.]{0,500}\badalet\b[^.]{0,300}",full_text,re.I)
+                    score_context=department_row.group(0) if department_row else full_text
+                    score_match=re.search(r"\bP\s*(93|94|3)\b",score_context,re.I)
                     score_type=("P"+score_match.group(1)) if score_match else None
-                    min_match=re.search(r"(?:en\s+az|asgari)\s*(\d{2,3})\s*(?:puan)?",full_text,re.I)
+                    min_match=re.search(r"(?:en\s+az|asgari)\s*(\d{2,3})\s*(?:puan)?",score_context,re.I)
                     minimum_score=int(min_match.group(1)) if min_match else None
-                    count_match=re.search(r"\b(\d{1,3})\s+adet\b",full_text,re.I)
-                    position_count=int(count_match.group(1)) if count_match else None
-                    date_matches=re.findall(r"\b(\d{1,2}[./-]\d{1,2}[./-]\d{4})\b",full_text)
+                    if department_row:
+                        position_count=int(department_row.group(1))
+                    application_section=re.search(r"BAŞVURU\s+YERİ.{0,80}?TARİHİ.{0,80}?SÜRESİ\s*:?([\s\S]{0,1800}?)(?=BAŞVURULARIN\s+DEĞERLENDİRİLMESİ|SINAVIN\s+YERİ|$)",full_text,re.I)
+                    date_matches=re.findall(r"\b(\d{1,2}[./-]\d{1,2}[./-]\d{4})\b",application_section.group(1) if application_section else "")
                     if date_matches:
                         start_date=date(date_matches[0])
+                    print(f"İŞKUR PDF OK: {title} · {len(full_text)} karakter · bölümler: {', '.join(departments) if departments else 'çıkarılamadı'} · KPSS: {score_type or 'çıkarılamadı'} · kontenjan: {position_count or 'çıkarılamadı'} · başlangıç: {start_date or 'çıkarılamadı'}",file=sys.stderr)
                 except Exception as exc:
                     print(f"İŞKUR PDF ayrıntısı alınamadı: {detail}: {str(exc)[:180]}",file=sys.stderr)
             is_open=bool(end_date and end_date>=local_today() and (not start_date or start_date<=local_today()))
