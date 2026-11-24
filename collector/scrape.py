@@ -634,7 +634,7 @@ def scrape_sbb(browser):
     finally: p.close()
 
 SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":scrape_ilan,"kamuilan-sbb":scrape_sbb,"sbb-kurum-duyurulari":lambda b:scrape_sbb_official(),"iskur":scrape_iskur,"iskur-kamu-memur":scrape_iskur_memur}
-SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"sbb-kurum-duyurulari":180,"iskur":240,"iskur-kamu-memur":5}
+SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"sbb-kurum-duyurulari":180,"iskur":240,"iskur-kamu-memur":30}
 def report(sid,items=None,error=None):
     if not TOKEN: raise RuntimeError("MEMURPRO_INGEST_TOKEN secret is missing")
     r=requests.post(API+"/api/ingest",headers={"x-admin-token":TOKEN},json={"sourceId":sid,"items":items or [],"error":error},timeout=30); r.raise_for_status(); return r.json()
