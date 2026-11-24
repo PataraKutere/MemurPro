@@ -163,13 +163,19 @@ function renderSourceStatuses(sources) {
     if (!source) return;
     const stateEl = $('.source-state', row);
     if (!stateEl) return;
-    const labels = { connected: 'Bağlı', pending: 'Bağlantı bekliyor', failed: 'Kontrol hatası' };
+    const labels = { connected: 'Bağlı', pending: 'İlk kontrol bekleniyor', failed: 'Erişim hatası' };
     stateEl.textContent = labels[source.status] || 'Durum bilinmiyor';
     stateEl.className = `source-state ${source.status || 'pending'}`;
+    const detailEl = $('.source-copy small', row);
     const details = [];
-    if (source.checkedAt) details.push(`Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`);
-    if (source.lastError) details.push(`Açıklama: ${source.lastError}`);
-    stateEl.title = details.join(' · ') || 'Henüz kontrol edilmedi.';
+    if (source.lastError) details.push(source.lastError);
+    else if (source.checkedAt) details.push(`Son kontrol: ${new Date(source.checkedAt).toLocaleString('tr-TR')}`);
+    else details.push('Otomatik kontrol henüz çalışmadı.');
+    if (detailEl) {
+      detailEl.textContent = details.join(' · ');
+      detailEl.title = details.join(' · ');
+    }
+    stateEl.title = details.join(' · ');
   });
 }
 
