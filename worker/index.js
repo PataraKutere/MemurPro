@@ -178,6 +178,122 @@ function parseOsymKpssPage(html, source) {
   return items.slice(0, 100);
 }
 
+function parseTurkishDayMonth(value) {
+  const months = { 'ocak':'01','şubat':'02','subat':'02','mart':'03','nisan':'04','mayıs':'05','mayis':'05','haziran':'06','temmuz':'07','ağustos':'08','agustos':'08','eylül':'09','eylul':'09','ekim':'10','kasım':'11','kasim':'11','aralık':'12','aralik':'12' };
+  const match = String(value || '').trim().toLocaleLowerCase('tr-TR').match(/(\d{1,2})\s+([a-zçşğıöü]+)/i);
+  if (!match) return null;
+  const month = months[match[2]];
+  if (!month) return null;
+  const now = new Date();
+  let year = now.getFullYear();
+  const monthNumber = Number(month);
+  if (monthNumber < now.getMonth() + 1 && now.getMonth() === 11 && monthNumber === 1) year++;
+  return year + '-' + month + '-' + match[1].padStart(2, '0');
+}
+
+function classifyPublicCategory(title) {
+  const value = String(title || '').toLocaleLowerCase('tr-TR');
+  if (/zabıta|itfaiye|belediye/.test(value)) return 'Belediye';
+  if (/sözleşmeli|4\/b/.test(value)) return 'Sözleşmeli';
+  if (/işçi|sürekli işçi|geçici işçi/.test(value)) return 'İşçi';
+  if (/memur|uzman yardımcısı|müfettiş yardımcısı|denetçi|icra müdürü/.test(value)) return 'Memur';
+  return 'Kamu ilanı';
+}
+
+function parseIlanGovItems(payload, source) {
+  const ads = payload && payload.result && Array.isArray(payload.result.ads) ? payload.result.ads : null;
+  if (!ads) throw new Error('İlan.gov.tr API beklenen result.ads listesini döndürmedi.');
+  return ads.map(item => {
+    const id = safeText(item.id || item.idInt || item.adNo, 100);
+    const title = safeText(item.title, 600);
+    if (!title || !id) return null;
+
+    const relativeUrl = safeText(item.urlStr, 1800);
+    let detailUrl = 'https://www.ilan.gov.tr/';
+    if (relativeUrl) {
+      try {
+        const parsed = new URL(relativeUrl, 'https://www.ilan.gov.tr');
+        if (parsed.hostname === 'www.ilan.gov.tr' || parsed.hostname === 'ilan.gov.tr') detailUrl = parsed.toString();
+      } catch {}
+    } else {
+      const slug = safeText(item.slugifyTitle || item.slug, 500);
+      detailUrl = 'https://www.ilan.gov.tr/ilan/' + encodeURIComponent(id) + (slug ? '/' + encodeURIComponent(slug) : '');
+    }
+
+    const filters = Array.isArray(item.adTypeFilters) ? item.adTypeFilters : [];
+    const filterText = filters.map(entry => {
+      const key = safeText(entry.key, 100);
+      const value = safeText(entry.value, 300);
+      return key && value ? key + ': ' + value : '';
+    }).filter(Boolean).join(' · ');
+
+    return {
+      externalId: 'ilan-gov-' + id,
+      title,
+      institution: safeText(item.advertiserName || 'Kamu / akademik kurum', 500),
+      summary: filterText ? 'Resmî ilan bilgileri: ' + filterText : 'İlan.gov.tr kamu-akademik personel ilanı. Şartlar ve başvuru yöntemi için resmî ilanı inceleyin.',
+      category: classifyPublicCategory(title) === 'Kamu ilanı' ? 'Akademik Personel' : classifyPublicCategory(title),
+      city: safeText(item.addressCityName, 100),
+      publishedAt: normalizeDate(item.publishStartDate),
+      detailUrl,
+      sourceName: source.name,
+      status: 'check_required'
+    };
+  }).filter(Boolean);
+}
+
+function parseSbbItems(html, source) {
+  const anchors = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)];
+  const seen = new Set();
+  const items = [];
+  for (const match of anchors) {
+    const attrs = match[1] || '';
+    const inner = match[2] || '';
+    const hrefMatch = attrs.match(/href\s*=\s*["']([^"']*ilanDetay\.aspx\?kod=[^"']+)["']/i);
+    if (!hrefMatch) continue;
+    const title = xmlText(inner);
+    if (title.length < 5) continue;
+    let code = '';
+    try {
+      const parsed = new URL(hrefMatch[1], source.homepage_url);
+      if (parsed.hostname !== 'kamuilan.sbb.gov.tr') continue;
+      code = parsed.searchParams.get('kod') || '';
+    } catch { continue; }
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+
+    const dateMatch = title.match(/(\d{1,2}\s+[A-Za-zÇŞĞÜÖİçşğıöü]+\s*-\s*\d{1,2}\s+[A-Za-zÇŞĞÜÖİçşğıöü]+)/i);
+    let startDate = null;
+    let endDate = null;
+    if (dateMatch) {
+      const parts = dateMatch[1].split('-');
+      startDate = parseTurkishDayMonth(parts[0]);
+      endDate = parseTurkishDayMonth(parts[1]);
+      if (startDate && endDate && endDate < startDate) {
+        const nextYear = Number(endDate.slice(0, 4)) + 1;
+        endDate = nextYear + endDate.slice(4);
+      }
+    }
+
+    const cleanTitle = dateMatch ? title.replace(dateMatch[0], '').replace(/[()]/g, '').trim() : title;
+    const parts = cleanTitle.split(/\s+-\s+/).filter(Boolean);
+    const institution = safeText(parts[0] || 'Kamu kurumu', 500);
+    items.push({
+      externalId: 'sbb-' + code,
+      title: cleanTitle || title,
+      institution,
+      summary: 'SBB Kamu İlan Portalı kaydı. Detay/PDF bağlantısı oturum korumalı olabilir; ilanı resmî portalın ana sayfasından başlıkla bulun.',
+      category: classifyPublicCategory(cleanTitle),
+      startDate,
+      endDate,
+      detailUrl: 'https://kamuilan.sbb.gov.tr/',
+      sourceName: source.name,
+      status: 'check_required'
+    });
+  }
+  return items.slice(0, 150);
+}
+
 async function fetchKariyerKapisi(source) {
   const endpoint = 'https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage';
   const requestBody = { krM_ID: 0, searchText: '', il: '0', ilanTuru: '0' };
@@ -247,7 +363,85 @@ async function fetchKariyerKapisi(source) {
   }).filter(Boolean);
 }
 
+async function fetchIlanGov(source) {
+  const endpoint = 'https://www.ilan.gov.tr/api/api/services/app/Ad/AdsByFilter';
+  const results = [];
+  const seen = new Set();
+
+  for (const skipCount of [0, 20, 40]) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'content-type': 'application/json-patch+json',
+          'accept': 'application/json, text/plain, */*',
+          'origin': 'https://www.ilan.gov.tr',
+          'referer': 'https://www.ilan.gov.tr/ilan/kategori/8/kamu-akademik-personel?ats=5',
+          'x-request-origin': 'IGT-UI',
+          'x-requested-with': 'XMLHttpRequest',
+          'user-agent': 'Mozilla/5.0 (compatible; MemurPro/0.1; public announcement monitor)'
+        },
+        body: JSON.stringify({
+          keys: { txv: [8], ats: [5], order: ['desc'], field: ['publish_time'] },
+          sorting: 'publish_time desc',
+          skipCount,
+          maxResultCount: 20
+        }),
+        redirect: 'follow'
+      });
+      if (!response.ok) throw new Error('İlan.gov.tr API HTTP ' + response.status);
+      const payload = await response.json();
+      const pageItems = parseIlanGovItems(payload, source);
+      for (const item of pageItems) {
+        if (!seen.has(item.externalId)) {
+          seen.add(item.externalId);
+          results.push(item);
+        }
+      }
+      if (pageItems.length < 20) break;
+    } finally {
+      clearTimeout(timeout);
+    }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  return results;
+}
+
+async function fetchSbb(source) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch('https://kamuilan.sbb.gov.tr/', {
+      signal: controller.signal,
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; MemurPro/0.1; public announcement monitor)',
+        'accept': 'text/html,application/xhtml+xml',
+        'accept-language': 'tr-TR,tr;q=0.9',
+        'referer': 'https://kamuilan.sbb.gov.tr/'
+      },
+      redirect: 'follow'
+    });
+    if (!response.ok) throw new Error('SBB portalı HTTP ' + response.status + ' döndürdü.');
+    const html = await response.text();
+    if (html.length > 3_000_000) throw new Error('SBB sayfası güvenli boyut sınırını aşıyor.');
+    const items = parseSbbItems(html, source);
+    if (!items.length) throw new Error('SBB portalında ayrıştırılabilir ilanDetay bağlantısı bulunamadı.');
+    return { items };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchFeed(source) {
+  if (source.adapter === 'ilan-gov') {
+    return { items: await fetchIlanGov(source) };
+  }
+  if (source.adapter === 'sbb-portal') {
+    return await fetchSbb(source);
+  }
   if (source.adapter === 'kariyer-kapisi') {
     return { items: await fetchKariyerKapisi(source) };
   }
