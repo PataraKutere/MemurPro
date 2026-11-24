@@ -780,7 +780,11 @@ async function syncConfiguredSources(env) {
   const outcomes = await Promise.all(sources.map(async source => {
     const now = Date.now();
     const lastChecked = source.last_checked_at ? Date.parse(source.last_checked_at) : NaN;
-    const minInterval = minIntervals[source.id] || 60 * 60 * 1000;
+    const normalInterval = minIntervals[source.id] || 60 * 60 * 1000;
+    // Hatalı/bozulmuş kaynakları günlük normal aralığı beklemeden yeniden dene.
+    const minInterval = ['failed', 'degraded'].includes(source.status)
+      ? 15 * 60 * 1000
+      : normalInterval;
     const nowIso = new Date(now).toISOString();
     const cutoffIso = new Date(now - minInterval).toISOString();
 
