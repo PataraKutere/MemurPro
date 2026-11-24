@@ -108,8 +108,8 @@
         <div class="filter-panel panel">
           <div class="filter-top"><div><div class="panel-kicker">ARAMA VE FİLTRELEME</div><h2>Arama kriterleri</h2></div><button class="text-button" id="clearFilters">Filtreleri temizle</button></div>
           <div class="filter-grid">
-            <label class="field search-field"><span>İlan veya kurum ara</span><div class="input-wrap"><span class="input-icon">⌕</span><input type="search" id="searchInput" placeholder="Örn. zabıta, üniversite, büro personeli"></div></label>
-            <label class="field"><span>Şehir</span><select id="cityFilter"><option value="">Tüm şehirler</option><option>İstanbul</option><option>Ankara</option><option>İzmir</option><option>Bursa</option><option>Antalya</option><option>Türkiye Geneli</option></select></label>
+            <label class="field search-field"><span>İlanın her alanında ara</span><div class="input-wrap"><span class="input-icon">⌕</span><input type="search" id="searchInput" placeholder="Örn. adalet, zabıta, bilgisayar işletmeni" autocomplete="off"></div></label>
+            <label class="field"><span>Bölüm / program</span><input type="search" id="departmentFilter" placeholder="Örn. Adalet" autocomplete="off"></label><label class="field"><span>Şehir</span><select id="cityFilter"><option value="">Tüm şehirler</option><option>İstanbul</option><option>Ankara</option><option>İzmir</option><option>Bursa</option><option>Antalya</option><option>Türkiye Geneli</option></select></label>
             <label class="field"><span>Öğrenim düzeyi</span><select id="educationFilter"><option value="">Tümü</option><option>Ortaöğretim</option><option>Ön lisans</option><option>Lisans</option><option>Doktora</option></select></label>
             <label class="field"><span>KPSS puan türü</span><select id="scoreFilter"><option value="">Tümü</option><option>P93</option><option>P94</option><option>P3</option><option>KPSS şartı yok</option></select></label>
             <label class="field"><span>İlan türü</span><select id="typeFilter"><option value="">Tüm türler</option><option>Memur</option><option>Sözleşmeli</option><option>Belediye</option><option>İşçi</option><option>KPSS</option><option>Akademik Personel</option><option>Resmî Gazete</option><option>Kamu ilanı</option><option>Duyuru</option></select></label>
@@ -159,7 +159,7 @@
             <div class="tool-head"><span class="tool-icon rose">◎</span><span class="tool-tag">ADAY PROFİLİ</span></div>
             <h2>Tercihlerini kaydet</h2><p>Filtrelerini daha hızlı kullanmak için öğrenim ve puan türünü bu cihazda sakla.</p>
             <label class="field"><span>Öğrenim düzeyi</span><select id="profileEducation"><option value="">Seçiniz</option><option>Ortaöğretim</option><option>Ön lisans</option><option>Lisans</option><option>Doktora</option></select></label>
-            <label class="field"><span>KPSS puan türü</span><select id="profileScore"><option value="">Seçiniz</option><option>P93</option><option>P94</option><option>P3</option></select></label>
+            <label class="field"><span>Mezun olunan bölüm / program</span><input type="text" id="profileDepartment" placeholder="Örn. Adalet"></label>\n            <label class="field"><span>KPSS puan türü</span><select id="profileScore"><option value="">Seçiniz</option><option>P93</option><option>P94</option><option>P3</option></select></label>
             <label class="field"><span>KPSS puanın (isteğe bağlı)</span><input type="number" id="profileScoreValue" min="0" max="100" step="0.00001" placeholder="Örn. 72,50"></label>
             <label class="field"><span>Öncelikli şehir</span><input type="text" id="profileCity" placeholder="Örn. İstanbul"></label>
             <button class="button button-primary full-button" id="saveProfile">Tercihleri kaydet</button>
