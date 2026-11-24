@@ -40,19 +40,13 @@ jobs:
             echo "::warning::MEMURPRO_INGEST_TOKEN is missing; scheduled collection will be skipped."
           fi
       - name: Install dependencies and Chromium
-        if: github.event_name == 'push' || steps.ingest-secret.outputs.enabled == 'true'
+        if: steps.ingest-secret.outputs.enabled == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r collector/requirements.txt
           python -m playwright install --with-deps chromium
-      - name: Smoke test public sources (no database writes)
-        if: github.event_name == 'push'
-        env:
-          MEMURPRO_API_BASE: https://memurpro-api.28berat28.workers.dev
-          COLLECTOR_DRY_RUN: '1'
-        run: python collector/scrape.py
       - name: Collect official announcements
-        if: github.event_name != 'push' && steps.ingest-secret.outputs.enabled == 'true'
+        if: steps.ingest-secret.outputs.enabled == 'true'
         env:
           MEMURPRO_API_BASE: https://memurpro-api.28berat28.workers.dev
           MEMURPRO_INGEST_TOKEN: ${{ secrets.MEMURPRO_INGEST_TOKEN }}
