@@ -363,5 +363,12 @@ def main():
                     except Exception as ie: results.append({"source":sid,"status":"failed","error":msg,"ingestError":str(ie)})
         finally: browser.close()
     print(json.dumps(results,ensure_ascii=False))
-    if not results or all(x.get("status")=="failed" for x in results): sys.exit(1)
+    if not results:
+        print("NO-OP: Hiçbir kaynak bu çalıştırmada kontrol gerektirmiyor; tüm kaynaklar kontrol aralığı veya backoff nedeniyle atlandı.")
+        return
+    failed=[x for x in results if x.get("status")=="failed"]
+    checked=[x for x in results if not x.get("skipped")]
+    if checked and len(failed)==len(checked):
+        print("ERROR: Kontrol edilen tüm kaynaklar başarısız oldu.",file=sys.stderr)
+        sys.exit(1)
 if __name__=="__main__": main()
