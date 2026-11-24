@@ -15,7 +15,7 @@
 
 Bu sürümde Cloudflare Worker ve D1 veritabanı kuruldu. ÖSYM duyuruları, Kariyer Kapısı'nın JSON ilan listesi, İlan.gov.tr'nin Kamu-Akademik Personel API'si, SBB portalının liste sayfası ve Resmî Gazete RSS'i için kaynak adaptörleri eklendi. Kariyer Kapısı, SBB ve İlan.gov.tr kaynakları erişim kısıtları uygulayabilir. Worker gerçek istek başarılı olursa kaynağı bağlı, başarısız olursa hata olarak işaretler. SBB'nin ilan detay/PDF bağlantıları oturuma bağlı olabildiği için MemurPro doğrudan kırılabilecek oturum URL'si yerine portal ana sayfasına yönlendirir. İŞKUR için henüz resmî, kimlik doğrulaması gerektirmeyen bir kamu ilanı API uç noktası doğrulanmadı. e-Devlet üzerinden erişilebilen iş arama hizmeti, kullanıcı oturumu gerektirdiği için MemurPro tarafından otomatik oturum açma yoluyla kullanılmaz.
 
-Resmî kaynak dizini:
+Resmî kaynak dizini (Resmî Gazete RSS bağlayıcısı `https://www.resmigazete.gov.tr/rss/rss.xml` adresini kullanacak şekilde yapılandırılmıştır; gerçek erişim ilk senkronizasyonda doğrulanır):
 - Kariyer Kapısı: <https://kariyerkapisi.gov.tr/>
 - ÖSYM KPSS: <https://www.osym.gov.tr/SinavGrubu/Index/3>
 - İŞKUR: <https://www.iskur.gov.tr/>
@@ -54,11 +54,11 @@ In the site, **Şimdi kontrol et** starts the first check without requiring a us
 4. Worker Settings → Bindings bölümünde D1 veritabanını `DB` adıyla bağla.
 5. Worker Settings → Variables and Secrets bölümünde `ADMIN_TOKEN` isminde rastgele ve güçlü bir secret oluştur. Bu değeri kaynak koda yazma.
 6. Worker için Cron Trigger ekle. MemurPro Worker `*/30 * * * *` takviminde çalışır. Kaynak başına istek aralıkları ayrıca sınırlandırılır: Kariyer Kapısı 30 dakika, ÖSYM/İlan.gov.tr/SBB 1 saat, Resmî Gazete RSS 24 saat. Böylece bütün kaynaklara her 30 dakikada bir gereksiz istek gönderilmez.
-7. `config.js` içindeki `window.MEMURPRO_API_BASE` değerini Worker'ın `https://...workers.dev` adresiyle değiştir.
+7. `config.js` içindeki API adresi hazır kurulumda `https://memurpro-api.28berat28.workers.dev` olarak ayarlanmıştır.
 
 ### Kaynak bağlayıcıları
 
-Worker yalnızca D1 `sources` tablosunda `feed_url` ve `feed_type` (`rss` veya `json`) alanları gerçek, herkese açık ve test edilmiş adreslerle doldurulmuş kaynakları otomatik çeker. `manual` durumundaki kaynaklar kaynak dizininde görünür, fakat otomatik ilan toplamaz.
+Worker kaynak kimliğine göre özel bağlayıcılar çalıştırır: `kariyer-kapisi` (Kariyer Kapısı JSON API), `osym-kpss` (ÖSYM KPSS duyuru listesi), `ilan-gov` (İlan.gov.tr Kamu-Akademik Personel API), `sbb-portal` (SBB portal liste sayfası) ve `feed` (RSS/JSON; Resmî Gazete RSS). `iskur` kaynağı için giriş gerektirmeyen resmî kamu ilanı API'si doğrulanana kadar otomatik veri çekilmez. RSS/JSON bağlayıcılarında `feed_url` ve `feed_type` alanları kullanılır.
 
 JSON akışı aşağıdaki normalize edilmiş alanları içermelidir:
 
