@@ -50,7 +50,7 @@ Bu depo `PataraKutere/MemurPro` adıyla oluşturulmuştur. Dosyalar kök dizinde
 3. D1 Console'da `worker/schema.sql` dosyasının tamamını çalıştır.
 4. Worker Settings → Bindings bölümünde D1 veritabanını `DB` adıyla bağla.
 5. Worker Settings → Variables and Secrets bölümünde `ADMIN_TOKEN` isminde rastgele ve güçlü bir secret oluştur. Bu değeri kaynak koda yazma.
-6. Worker için Cron Trigger ekle. Başlangıç için `0 */4 * * *` (4 saatte bir) kullanılabilir.
+6. Worker için Cron Trigger ekle. MemurPro Worker şu anda `*/30 * * * *` (30 dakikada bir) takviminde çalışacak şekilde yapılandırılmıştır.
 7. `config.js` içindeki `window.MEMURPRO_API_BASE` değerini Worker'ın `https://...workers.dev` adresiyle değiştir.
 
 ### Kaynak bağlayıcıları
