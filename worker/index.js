@@ -1,0 +1,241 @@
+const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
+const ALLOWED_METHODS = 'GET, POST, OPTIONS';
+
+function json(data, status = 200, extraHeaders = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...JSON_HEADERS, 'access-control-allow-origin': '*', 'access-control-allow-methods': ALLOWED_METHODS, 'access-control-allow-headers': 'content-type,x-admin-token', ...extraHeaders }
+  });
+}
+
+function safeText(value, max = 4000) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function xmlText(value) {
+  return safeText(value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))));
+}
+
+function tag(block, name) {
+  const match = block.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i'));
+  return match ? match[1] : '';
+}
+
+function parseXmlFeed(xml, source) {
+  const blocks = [...xml.matchAll(/<(item|entry)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi)].map(match => match[2]);
+  return blocks.map((block, index) => {
+    const atomLink = block.match(/<link[^>]+href=["']([^"']+)["'][^>]*>/i);
+    const linkTag = tag(block, 'link');
+    const link = atomLink?.[1] || xmlText(linkTag);
+    const title = xmlText(tag(block, 'title'));
+    const description = xmlText(tag(block, 'description') || tag(block, 'summary') || tag(block, 'content'));
+    const published = xmlText(tag(block, 'pubDate') || tag(block, 'published') || tag(block, 'updated'));
+    if (!title || !link) return null;
+    const url = new URL(link, source.homepage_url).toString();
+    return {
+      externalId: url,
+      title,
+      institution: source.name,
+      summary: description,
+      category: 'Kamu ilanı',
+      detailUrl: url,
+      publishedAt: normalizeDate(published),
+      sourceName: source.name,
+      status: 'check_required'
+    };
+  }).filter(Boolean).slice(0, 200);
+}
+
+function normalizeDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function normalizeDateOnly(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+function normalizeJsonFeed(payload, source) {
+  const items = Array.isArray(payload) ? payload : (Array.isArray(payload.items) ? payload.items : null);
+  if (!items) throw new Error('JSON kaynağı beklenen liste biçiminde değil.');
+  return items.slice(0, 200).map((item, index) => {
+    const detailUrl = safeText(item.detailUrl || item.detail_url || item.url || item.link, 2000);
+    const title = safeText(item.title || item.name, 500);
+    if (!title || !detailUrl) return null;
+    return {
+      externalId: safeText(item.id || item.externalId || item.external_id || detailUrl, 2000) || `${source.id}-${index}`,
+      title,
+      institution: safeText(item.institution || item.institutionName || item.organization || source.name, 500),
+      summary: safeText(item.summary || item.description, 4000),
+      category: safeText(item.category || item.type || 'Kamu ilanı', 100),
+      city: safeText(item.city || item.location, 100),
+      education: safeText(item.education || item.educationLevel, 100),
+      scoreType: safeText(item.scoreType || item.score_type, 50),
+      minimumScore: Number.isFinite(Number(item.minimumScore ?? item.minimum_score)) ? Number(item.minimumScore ?? item.minimum_score) : null,
+      publishedAt: normalizeDate(item.publishedAt || item.published_at || item.date),
+      startDate: normalizeDateOnly(item.startDate || item.start_date),
+      endDate: normalizeDateOnly(item.endDate || item.end_date),
+      detailUrl: new URL(detailUrl, source.homepage_url).toString(),
+      sourceName: source.name,
+      status: item.status === 'open' && (item.endDate || item.end_date) && normalizeDateOnly(item.endDate || item.end_date) >= new Date().toISOString().slice(0, 10) ? 'open' : 'check_required'
+    };
+  }).filter(Boolean);
+}
+
+async function hashText(text) {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function getSources(env) {
+  const result = await env.DB.prepare(`SELECT id, name, homepage_url AS homepageUrl, feed_type AS feedType, status, last_checked_at AS checkedAt, last_error AS lastError FROM sources ORDER BY name`).all();
+  return result.results || [];
+}
+
+async function getListings(request, env) {
+  const url = new URL(request.url);
+  const q = safeText(url.searchParams.get('q'), 120);
+  const city = safeText(url.searchParams.get('city'), 100);
+  const education = safeText(url.searchParams.get('education'), 100);
+  const score = safeText(url.searchParams.get('score'), 50);
+  const category = safeText(url.searchParams.get('type'), 100);
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100), 1), 200);
+
+  let sql = `SELECT id, title, institution, summary, category, city, education, score_type AS scoreType, minimum_score AS minimumScore, published_at AS publishedAt, start_date AS startDate, end_date AS endDate, detail_url AS url, source_name AS sourceName, status FROM announcements WHERE status IN ('open','check_required')`;
+  const params = [];
+  if (q) { sql += ` AND (title LIKE ? OR institution LIKE ? OR summary LIKE ?)`; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  if (city) { sql += ` AND (city = ? OR city = 'Türkiye Geneli')`; params.push(city); }
+  if (education) { sql += ` AND education = ?`; params.push(education); }
+  if (score) { sql += ` AND score_type = ?`; params.push(score); }
+  if (category) { sql += ` AND category = ?`; params.push(category); }
+  sql += ` ORDER BY COALESCE(published_at, created_at) DESC LIMIT ?`;
+  params.push(limit);
+  const rows = await env.DB.prepare(sql).bind(...params).all();
+  return rows.results || [];
+}
+
+async function fetchFeed(source) {
+  if (!source.feed_url || !['rss', 'json'].includes(source.feed_type)) {
+    return { skipped: true, reason: 'Doğrulanmış herkese açık RSS/JSON akışı henüz tanımlanmadı.' };
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(source.feed_url, {
+      signal: controller.signal,
+      headers: { 'user-agent': 'MemurPro/0.1 (+official-source-monitor)', 'accept': 'application/rss+xml, application/atom+xml, application/json, text/xml;q=0.9, */*;q=0.8' },
+      redirect: 'follow'
+    });
+    if (!response.ok) throw new Error(`Kaynak HTTP ${response.status} döndürdü.`);
+    const body = await response.text();
+    if (body.length > 2_000_000) throw new Error('Kaynak yanıtı güvenli boyut sınırını aşıyor.');
+    if (source.feed_type === 'json') return { items: normalizeJsonFeed(JSON.parse(body), source) };
+    if (!/<(?:rss|feed|rdf|item|entry)(?:\s|>)/i.test(body)) throw new Error('Yanıt RSS/Atom biçiminde değil; HTML sayfa otomatik ilan akışı olarak kullanılamaz.');
+    return { items: parseXmlFeed(body, source) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function syncOneSource(source, env) {
+  const checkedAt = new Date().toISOString();
+  try {
+    const result = await fetchFeed(source);
+    if (result.skipped) {
+      await env.DB.prepare(`UPDATE sources SET status='pending', last_checked_at=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .bind(checkedAt, result.reason, source.id).run();
+      return { source: source.name, status: 'pending', imported: 0, message: result.reason };
+    }
+
+    let imported = 0;
+    for (const item of result.items) {
+      const externalId = safeText(item.externalId || item.detailUrl, 2000);
+      if (!externalId) continue;
+      const id = `${source.id}-${(await hashText(externalId)).slice(0, 24)}`;
+      const fingerprint = await hashText(JSON.stringify(item));
+      await env.DB.prepare(`
+        INSERT INTO announcements (
+          id, source_id, external_id, title, institution, summary, category, city, education,
+          score_type, minimum_score, published_at, start_date, end_date, detail_url, source_name,
+          status, content_hash, last_verified_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(source_id, external_id) DO UPDATE SET
+          title=excluded.title, institution=excluded.institution, summary=excluded.summary,
+          category=excluded.category, city=excluded.city, education=excluded.education,
+          score_type=excluded.score_type, minimum_score=excluded.minimum_score,
+          published_at=excluded.published_at, start_date=excluded.start_date, end_date=excluded.end_date,
+          detail_url=excluded.detail_url, source_name=excluded.source_name, status=excluded.status,
+          content_hash=excluded.content_hash, last_verified_at=excluded.last_verified_at,
+          updated_at=CURRENT_TIMESTAMP
+      `).bind(
+        id, source.id, externalId, item.title, item.institution || source.name, item.summary || null,
+        item.category || 'Kamu ilanı', item.city || null, item.education || null,
+        item.scoreType || null, item.minimumScore ?? null, item.publishedAt || null,
+        item.startDate || null, item.endDate || null, item.detailUrl, source.name,
+        item.status || 'check_required', fingerprint, checkedAt
+      ).run();
+      imported++;
+    }
+    await env.DB.prepare(`UPDATE sources SET status='connected', last_checked_at=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .bind(checkedAt, source.id).run();
+    return { source: source.name, status: 'connected', imported };
+  } catch (error) {
+    const message = safeText(error?.message || 'Bilinmeyen kaynak hatası', 500);
+    await env.DB.prepare(`UPDATE sources SET status='failed', last_checked_at=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .bind(checkedAt, message, source.id).run();
+    return { source: source.name, status: 'failed', imported: 0, message };
+  }
+}
+
+async function syncConfiguredSources(env) {
+  const result = await env.DB.prepare(`SELECT id, name, homepage_url, feed_url, feed_type, enabled FROM sources WHERE enabled=1`).all();
+  const sources = result.results || [];
+  const outcomes = [];
+  // Keep concurrency low to avoid stressing public endpoints.
+  for (const source of sources) outcomes.push(await syncOneSource(source, env));
+  return outcomes;
+}
+
+export default {
+  async fetch(request, env) {
+    if (!env.DB) return json({ error: 'D1 veritabanı bağlantısı yapılandırılmamış.' }, 503);
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': ALLOWED_METHODS, 'access-control-allow-headers': 'content-type,x-admin-token' } });
+    const url = new URL(request.url);
+    try {
+      if (request.method === 'GET' && url.pathname === '/api/health') {
+        return json({ ok: true, service: 'MemurPro API', time: new Date().toISOString() });
+      }
+      if (request.method === 'GET' && url.pathname === '/api/sources') {
+        return json({ sources: await getSources(env) });
+      }
+      if (request.method === 'GET' && url.pathname === '/api/listings') {
+        const [listings, sources] = await Promise.all([getListings(request, env), getSources(env)]);
+        return json({ listings, sources, updatedAt: new Date().toISOString() }, 200, { 'cache-control': 'public, max-age=60' });
+      }
+      if (request.method === 'POST' && url.pathname === '/api/admin/sync') {
+        if (!env.ADMIN_TOKEN || request.headers.get('x-admin-token') !== env.ADMIN_TOKEN) return json({ error: 'Yetkisiz işlem.' }, 401);
+        return json({ results: await syncConfiguredSources(env) });
+      }
+      return json({ error: 'Bulunamadı.' }, 404);
+    } catch (error) {
+      return json({ error: safeText(error?.message || 'Sunucu hatası', 500) }, 500);
+    }
+  },
+
+  async scheduled(_controller, env, ctx) {
+    if (!env.DB) return;
+    ctx.waitUntil(syncConfiguredSources(env));
+  }
+};
