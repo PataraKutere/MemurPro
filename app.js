@@ -113,9 +113,9 @@ function isResmiGazeteListing(listing) {
 }
 
 function compactText(value, limit) {
-  const text = String(value || '').replace(/\\s+/g, ' ').trim();
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (text.length <= limit) return text;
-  return text.slice(0, limit).replace(/\\s+\\S*$/, '').trimEnd() + '…';
+  return text.slice(0, limit).replace(/\s+\S*$/, '').trimEnd() + '…';
 }
 
 function safeListingUrl(value) {
