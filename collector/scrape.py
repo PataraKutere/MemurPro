@@ -704,3 +704,5 @@ def main():
         print("ERROR: Kontrol edilen tüm kaynaklar başarısız oldu.",file=sys.stderr)
         sys.exit(1)
 if __name__=="__main__": main()
+
+# Self-hosted workflow runs set COLLECTOR_FORCE=1 to bypass only retry timing, never source access controls.
