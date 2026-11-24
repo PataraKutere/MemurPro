@@ -49,6 +49,7 @@ function setView(view) {
   $('#breadcrumbCurrent').textContent = names[view];
   if (view === 'saved') renderSaved();
   if (view === 'listings') renderListings();
+  if (view === 'overview') renderMatchedListings();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -129,6 +130,72 @@ function renderListings() {
   $('#listingResults').innerHTML = filtered.length ? filtered.map(listingCard).join('') : `<div class="listing-placeholder"><strong>Bu kriterlerle eşleşen ilan yok</strong><p>Filtrelerini değiştirerek yeniden deneyebilirsin.</p></div>`;
 }
 
+function getProfileMatch(listing) {
+  const profile = state.profile;
+  if (!profile || !(profile.education || profile.scoreType || profile.city || Number.isFinite(Number(profile.score)))) return null;
+  let points = 0;
+  let known = 0;
+  const reasons = [];
+  if (profile.education) {
+    if (listing.education) {
+      known++;
+      if (listing.education === profile.education) { points += 3; reasons.push('Öğrenim uyumu'); }
+      else return { matched: false, points: 0, reasons: ['Öğrenim düzeyi farklı'] };
+    }
+  }
+  if (profile.scoreType) {
+    if (listing.scoreType) {
+      known++;
+      if (listing.scoreType === profile.scoreType) { points += 3; reasons.push('KPSS türü uyumu'); }
+      else if (listing.scoreType !== 'KPSS şartı yok') return { matched: false, points: 0, reasons: ['KPSS puan türü farklı'] };
+    } else if (/KPSS şartı yok/i.test(listing.summary || '')) {
+      known++;
+      points += 2;
+      reasons.push('KPSS şartı aranmıyor');
+    }
+  }
+  if (profile.city) {
+    if (listing.city) {
+      known++;
+      if (listing.city.toLocaleLowerCase('tr-TR') === profile.city.toLocaleLowerCase('tr-TR') || listing.city === 'Türkiye Geneli') {
+        points += listing.city === 'Türkiye Geneli' ? 1 : 2;
+        reasons.push(listing.city === 'Türkiye Geneli' ? 'Türkiye geneli' : 'Şehir uyumu');
+      } else return { matched: false, points: 0, reasons: ['Şehir tercihi farklı'] };
+    }
+  }
+  if (Number.isFinite(Number(profile.score)) && profile.score !== null && profile.score !== '') {
+    if (Number.isFinite(Number(listing.minimumScore))) {
+      known++;
+      if (Number(profile.score) >= Number(listing.minimumScore)) {
+        points += 2;
+        reasons.push('Puan barajı karşılanıyor');
+      } else return { matched: false, points: 0, reasons: ['KPSS puanı barajın altında'] };
+    }
+  }
+  return { matched: true, points, known, reasons };
+}
+
+function renderMatchedListings() {
+  const container = $('#matchedListings');
+  if (!container) return;
+  const profile = state.profile;
+  if (!profile || !(profile.education || profile.scoreType || profile.city || (profile.score !== null && profile.score !== undefined && profile.score !== ''))) {
+    container.innerHTML = `<div class="listing-placeholder"><strong>Aday profilini tamamla</strong><p>Öğrenim, KPSS türü, puan ve şehir bilgilerini ekleyerek ilan eşleştirmesini etkinleştir. Bilgilerin yalnızca bu cihazda saklanır.</p><button class="button button-outline" data-go="tools">Aday profilini oluştur</button></div>`;
+    return;
+  }
+  const matches = state.listings.map(item => ({ item, match: getProfileMatch(item) }))
+    .filter(entry => entry.match && entry.match.matched)
+    .sort((a,b) => b.match.points-a.match.points || (b.item.publishedAt || '').localeCompare(a.item.publishedAt || ''));
+  if (!matches.length) {
+    container.innerHTML = `<div class="listing-placeholder"><strong>Şu an eşleşen ilan bulunamadı</strong><p>Bu, uygun ilan olmadığı anlamına kesin olarak gelmez. Kaynaklarda öğrenim, puan türü veya şehir bilgisi eksik olabilir. Profilini güncelleyebilir ya da tüm ilanları inceleyebilirsin.</p><button class="button button-outline" data-go="listings">Tüm ilanları gör</button></div>`;
+    return;
+  }
+  container.innerHTML = matches.slice(0,4).map(({item,match}) => {
+    const reasons = match.reasons.length ? match.reasons.join(' · ') : 'İlan şartlarında çelişen bilgi yok; ayrıntıları resmî kaynaktan doğrula.';
+    return listingCard(item).replace('<div class="listing-org">', `<div class="match-reasons">${escapeHTML(reasons)}</div><div class="listing-org">`);
+  }).join('');
+}
+
 function renderSaved() {
   const container = $('#savedResults');
   if (!state.saved.length) {
@@ -148,6 +215,7 @@ async function loadLiveData() {
     if (!Array.isArray(payload.listings)) throw new Error('Beklenmeyen API yanıtı');
     state.listings = payload.listings;
     renderListings();
+    renderMatchedListings();
     if (state.view === 'saved') renderSaved();
     if (payload.sources) renderSourceStatuses(payload.sources);
     return payload;
@@ -250,12 +318,17 @@ function saveProfile() {
   const profile = {
     education: $('#profileEducation').value,
     scoreType: $('#profileScore').value,
+    score: $('#profileScoreValue').value === '' ? null : Number($('#profileScoreValue').value),
     city: $('#profileCity').value.trim(),
     savedAt: new Date().toISOString()
   };
   localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
   state.profile = profile;
+  if (profile.score !== null && (!Number.isFinite(profile.score) || profile.score < 0 || profile.score > 100)) {
+    return setToolResult($('#profileResult'), 'KPSS puanı 0–100 arasında olmalı.', 'warning');
+  }
   setToolResult($('#profileResult'), 'Tercihlerin bu tarayıcıya kaydedildi. Sunucuya gönderilmedi.', 'success');
+  renderMatchedListings();
   showToast('Aday tercihlerin kaydedildi.');
 }
 
@@ -263,6 +336,7 @@ function populateProfile() {
   if (!state.profile) return;
   $('#profileEducation').value = state.profile.education || '';
   $('#profileScore').value = state.profile.scoreType || '';
+  $('#profileScoreValue').value = state.profile.score ?? '';
   $('#profileCity').value = state.profile.city || '';
 }
 
@@ -351,6 +425,7 @@ function bindEvents() {
   $('#calculateDeadline').addEventListener('click', calculateDeadline);
   $('#saveProfile').addEventListener('click', saveProfile);
   $('#profileButton').addEventListener('click', showProfileTool);
+  $('#editMatchProfile')?.addEventListener('click', showProfileTool);
   $('#refreshSources')?.addEventListener('click', refreshSources);
 }
 
