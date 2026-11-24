@@ -444,6 +444,41 @@ def scrape_iskur_memur(browser):
     finally:
         p.close()
 
+def scrape_sbb_official():
+    # Bu yedek kaynak yalnızca SBB'nin kendi resmî duyurularını tarar.
+    # kamuilan.sbb.gov.tr portalının yerine geçtiği veya tüm kurum ilanlarını kapsadığı iddia edilmez.
+    url="https://www.sbb.gov.tr/tumu/"
+    r=S.get(url,timeout=25,headers={"Referer":"https://www.sbb.gov.tr/"})
+    r.raise_for_status()
+    soup=BeautifulSoup(decode(r),"html.parser")
+    out=[]; seen=set()
+    for a in soup.find_all("a",href=True):
+        title=tx(a)
+        href=urljoin(url,a["href"])
+        host=urlparse(href).hostname or ""
+        if host not in ("sbb.gov.tr","www.sbb.gov.tr") or href.rstrip("/") == url.rstrip("/"):
+            continue
+        if len(title)<8 or not RE.search(title) or BAD.search(title):
+            continue
+        if href in seen: continue
+        seen.add(href)
+        parent=a
+        context=title
+        for _ in range(4):
+            if not parent.parent: break
+            parent=parent.parent
+            candidate=tx(parent.get_text(" ",strip=True))
+            if len(candidate)>len(context) and len(candidate)<2500:
+                context=candidate
+        date_match=re.search(r"(\\d{4}-\\d{2}-\\d{2})",context)
+        published=date(date_match.group(1)) if date_match else None
+        category="İşçi" if re.search(r"işçi\\s+al[ıi]m",title,re.I) else "Memur"
+        out.append(item("sbb-kurum-duyurulari",href,title,"Strateji ve Bütçe Başkanlığı",href,
+            context or "SBB'nin kendi personel duyurusu; ayrıntılar resmî sayfadan kontrol edilmeli.",
+            category=category,publishedAt=published,status="check_required"))
+    print(f"SBB kurum duyuruları: {len(out)} personel ilanı bulundu.",file=sys.stderr)
+    return out[:100]
+
 def scrape_sbb(browser):
     p=browser.new_page()
     try:
@@ -456,8 +491,8 @@ def scrape_sbb(browser):
         return sbb_html(p.content())
     finally: p.close()
 
-SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":scrape_ilan,"kamuilan-sbb":scrape_sbb,"iskur":scrape_iskur,"iskur-kamu-memur":scrape_iskur_memur}
-SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"iskur":240,"iskur-kamu-memur":30}
+SCRAPERS={"kariyer-kapisi":scrape_kariyer,"resmi-gazete":lambda b:scrape_resmi(),"osym":lambda b:scrape_osym(),"ilan-gov":scrape_ilan,"kamuilan-sbb":scrape_sbb,"sbb-kurum-duyurulari":lambda b:scrape_sbb_official(),"iskur":scrape_iskur,"iskur-kamu-memur":scrape_iskur_memur}
+SOURCE_INTERVAL_MINUTES={"kariyer-kapisi":30,"resmi-gazete":30,"osym":120,"ilan-gov":90,"kamuilan-sbb":180,"sbb-kurum-duyurulari":180,"iskur":240,"iskur-kamu-memur":30}
 def report(sid,items=None,error=None):
     if not TOKEN: raise RuntimeError("MEMURPRO_INGEST_TOKEN secret is missing")
     r=requests.post(API+"/api/ingest",headers={"x-admin-token":TOKEN},json={"sourceId":sid,"items":items or [],"error":error},timeout=30); r.raise_for_status(); return r.json()
